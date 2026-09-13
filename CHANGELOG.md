@@ -39,6 +39,12 @@ All notable changes to GearSweep are documented in this file.
   selects alongside the equipped item level each was compared against -
   diagnostics for tracking down why Upgrade mode's candidate set doesn't
   match expectations against real, live gear.
+- Collapsible Quality/Slot/Season-Tier filter sections (#32): click a
+  section's header to collapse or expand it, freeing space for the
+  results list. Collapsed state persists between sessions, per section.
+- Results list rows now show the real item tooltip on hover - including
+  Blizzard's automatic equipped-item comparison pane - exactly as if the
+  item were being hovered directly in bags/bank (#33).
 
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by

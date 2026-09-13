@@ -47,10 +47,13 @@ Under active development. See the [milestones](../../milestones) and
 
 The sweep window (`/gs`) has a Mode toggle (Disenchant / Upgrade) plus filter
 controls - quality, slot, and item level range are shared by both modes;
-Adventurer-tier/previous-season toggles only apply to Disenchant. All filter
-values persist between sessions, independently per mode. The settings panel
-(`/gs options`, or the standard WoW AddOns options menu) currently only has
-diagnostic logging; an auto-open toggle lands with
+Adventurer-tier/previous-season toggles only apply to Disenchant. Click a
+filter section's header to collapse or expand it and free up room for the
+results list; collapsed state persists per section. All filter values
+persist between sessions, independently per mode. Hover a result row for
+the item's real tooltip, including the equipped-item comparison pane. The
+settings panel (`/gs options`, or the standard WoW AddOns options menu)
+currently only has diagnostic logging; an auto-open toggle lands with
 [v0.5.0](../../milestone/5).
 
 ## License

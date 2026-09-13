@@ -122,9 +122,13 @@ local ROW_HEIGHT = 20
 local MAX_ROWS = 200
 
 local frame, content, rows, statusText
-local minLevelBox, maxLevelBox
+local minLevelBox, maxLevelBox, levelLabel, refreshButton
 local qualityCheckboxes, slotCheckboxes, adventurerCheckbox, previousSeasonCheckbox
-local seasonLabel, disenchantModeCheckbox, upgradeModeCheckbox
+local qualityHeader, slotHeader, seasonHeader
+local disenchantModeCheckbox, upgradeModeCheckbox
+
+local PADDING = 16
+local LABEL_COLUMN = 100
 
 -- "disenchant" or "upgrade" (#17). Not persisted - the panel always opens
 -- on Disenchant, matching v0.3.0's behavior for players who never switch.
@@ -149,6 +153,18 @@ local function GetOrCreateRow(index)
   row = CreateFrame("Frame", nil, content)
   row:SetSize(560, ROW_HEIGHT)
   row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
+
+  -- SetBagItem (not SetHyperlink) so hovering a row shows exactly the same
+  -- tooltip - including Blizzard's automatic equipped-item comparison
+  -- pane - as hovering the item directly in bags/bank (#33).
+  row:EnableMouse(true)
+  row:SetScript("OnEnter", function(self)
+    if not self.item then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetBagItem(self.item.bagID, self.item.slot)
+    GameTooltip:Show()
+  end)
+  row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   row.checkbox = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
   row.checkbox:SetSize(20, 20)
@@ -285,46 +301,85 @@ end
 -- is always (rows * ROW_STEP), computable up front instead of guessed.
 local ROW_STEP = 24
 
--- All checkboxes are positioned as explicit (x, y) offsets from `frame`
--- directly, never chained off a previous element's BOTTOMLEFT - that
--- chaining was what produced guessed, wrong gaps between sections.
+-- Checkboxes are created once, then positioned separately (PositionXxx
+-- below) so a section's collapse toggle (#32) can re-run just the layout
+-- pass without recreating any frames. Positions are always explicit (x, y)
+-- offsets from `frame` directly, never chained off a previous element's
+-- BOTTOMLEFT - that chaining was what produced guessed, wrong gaps
+-- between sections.
 
-local function CreateQualityCheckboxes(parent, x, yTop)
+local function CreateQualityCheckboxes(parent)
   local checkboxes = {}
-  for i, def in ipairs(QUALITY_FILTERS) do
+  for _, def in ipairs(QUALITY_FILTERS) do
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
-    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, yTop - (i - 1) * ROW_STEP)
     cb.Text:SetText(def.label)
     cb:SetScript("OnClick", function(self)
       ns.db[currentMode].excludedQualities[def.quality] = (not self:GetChecked()) or nil
     end)
     checkboxes[def.quality] = cb
   end
-  return checkboxes, yTop - #QUALITY_FILTERS * ROW_STEP
+  return checkboxes
 end
 
--- Two columns of up to 7; returns the checkboxes table and the bottom Y
--- of the taller column, so the caller can lay out whatever comes next
--- without guessing how many rows this section took.
-local function CreateSlotCheckboxes(parent, x, yTop)
+-- Repositions the (already-created) quality checkboxes and returns the
+-- bottom Y of the section, so the caller can lay out whatever comes next
+-- without guessing how many rows it took.
+local function PositionQualityCheckboxes(x, yTop)
+  for i, def in ipairs(QUALITY_FILTERS) do
+    qualityCheckboxes[def.quality]:SetPoint("TOPLEFT", frame, "TOPLEFT", x, yTop - (i - 1) * ROW_STEP)
+  end
+  return yTop - #QUALITY_FILTERS * ROW_STEP
+end
+
+local function CreateSlotCheckboxes(parent)
   local checkboxes = {}
-  local perColumn = 7
-  local columnWidth = 110
-  for i, group in ipairs(SLOT_GROUPS) do
-    local col = math.floor((i - 1) / perColumn)
-    local row = (i - 1) % perColumn
+  for _, group in ipairs(SLOT_GROUPS) do
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
-    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x + col * columnWidth, yTop - row * ROW_STEP)
     cb.Text:SetText(group.label)
     cb:SetScript("OnClick", function(self)
       ns.db[currentMode].excludedSlotGroups[group.id] = (not self:GetChecked()) or nil
     end)
     checkboxes[group.id] = cb
   end
+  return checkboxes
+end
+
+-- Two columns of up to 7; returns the bottom Y of the taller column.
+local function PositionSlotCheckboxes(x, yTop)
+  local perColumn = 7
+  local columnWidth = 110
+  for i, group in ipairs(SLOT_GROUPS) do
+    local col = math.floor((i - 1) / perColumn)
+    local row = (i - 1) % perColumn
+    slotCheckboxes[group.id]:SetPoint("TOPLEFT", frame, "TOPLEFT", x + col * columnWidth, yTop - row * ROW_STEP)
+  end
   local rowCount = math.min(perColumn, #SLOT_GROUPS)
-  return checkboxes, yTop - rowCount * ROW_STEP
+  return yTop - rowCount * ROW_STEP
+end
+
+-- A clickable section label that toggles its collapse state (#32) and
+-- reflows everything below it, freeing space for the results list.
+local function CreateSectionHeader(key, label)
+  local button = CreateFrame("Button", nil, frame)
+  button:SetSize(LABEL_COLUMN, 20)
+  button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+  local text = button:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  text:SetPoint("LEFT", button, "LEFT", 0, 0)
+  text:SetJustifyH("LEFT")
+  button.text = text
+  button.key = key
+  button.label = label
+  button:SetScript("OnClick", function(self)
+    ns.db.uiCollapsed[self.key] = not ns.db.uiCollapsed[self.key]
+    UI:RelayoutFrame()
+  end)
+  return button
+end
+
+local function UpdateSectionHeaderText(button)
+  button.text:SetText((ns.db.uiCollapsed[button.key] and "+ " or "- ") .. button.label)
 end
 
 local function CreatePanel()
@@ -354,70 +409,51 @@ local function CreatePanel()
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
 
-  local PADDING = 16
-  local LABEL_COLUMN = 100
-  local y = -32
-
   local modeLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  modeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  modeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
   modeLabel:SetText("Mode")
 
   disenchantModeCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   disenchantModeCheckbox:SetSize(20, 20)
-  disenchantModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
+  disenchantModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, -32)
   disenchantModeCheckbox.Text:SetText("Disenchant")
   disenchantModeCheckbox:SetScript("OnClick", function() UI:SetMode("disenchant") end)
 
   upgradeModeCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   upgradeModeCheckbox:SetSize(20, 20)
-  upgradeModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN + 130, y)
+  upgradeModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN + 130, -32)
   upgradeModeCheckbox.Text:SetText("Upgrade")
   upgradeModeCheckbox:SetScript("OnClick", function() UI:SetMode("upgrade") end)
-  y = y - ROW_STEP - 10
 
-  local qualityLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  qualityLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
-  qualityLabel:SetText("Quality")
-  qualityCheckboxes, y = CreateQualityCheckboxes(frame, PADDING + LABEL_COLUMN, y)
-  y = y - 10
+  qualityHeader = CreateSectionHeader("quality", "Quality")
+  qualityCheckboxes = CreateQualityCheckboxes(frame)
 
-  local slotLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  slotLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
-  slotCheckboxes, y = CreateSlotCheckboxes(frame, PADDING + LABEL_COLUMN, y)
-  slotLabel:SetText("Slot")
-  y = y - 10
+  slotHeader = CreateSectionHeader("slot", "Slot")
+  slotCheckboxes = CreateSlotCheckboxes(frame)
 
-  seasonLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  seasonLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
-  seasonLabel:SetText("Season / Tier")
+  seasonHeader = CreateSectionHeader("season", "Season / Tier")
 
   adventurerCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   adventurerCheckbox:SetSize(20, 20)
-  adventurerCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
   adventurerCheckbox.Text:SetText("Adventurer tier (current season)")
   adventurerCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includeAdventurerTier = self:GetChecked() and true or false
   end)
-  y = y - ROW_STEP
 
   previousSeasonCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   previousSeasonCheckbox:SetSize(20, 20)
-  previousSeasonCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
   previousSeasonCheckbox.Text:SetText("Previous season / expansion")
   previousSeasonCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includePreviousSeason = self:GetChecked() and true or false
   end)
-  y = y - ROW_STEP - 10
 
-  local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   levelLabel:SetText("Item Level")
 
   minLevelBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
   minLevelBox:SetSize(50, 20)
   minLevelBox:SetAutoFocus(false)
   minLevelBox:SetNumeric(true)
-  minLevelBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y + 2)
   minLevelBox:SetScript("OnEnterPressed", function(self)
     ns.db[currentMode].minLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS[currentMode].minLevel
     self:ClearFocus()
@@ -436,12 +472,10 @@ local function CreatePanel()
     ns.db[currentMode].maxLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS[currentMode].maxLevel
     self:ClearFocus()
   end)
-  y = y - ROW_STEP - 10
 
-  local refreshButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  refreshButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refreshButton:SetSize(80, 22)
   refreshButton:SetText("Refresh")
-  refreshButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   refreshButton:SetScript("OnClick", function() UI:Refresh() end)
 
   local selectAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -480,9 +514,65 @@ local function CreatePanel()
   end)
 end
 
+-- Repositions everything below the Mode row from scratch (#32): called on
+-- every mode switch and every section collapse/expand toggle. Most widgets
+-- below the sections chain off each other via relative anchors (Select
+-- All/None off Refresh, statusText off Refresh, the scroll frame off
+-- statusText) and never need repositioning directly - only each section's
+-- own header/body and the two explicitly `frame`-anchored rows after them
+-- (Item Level, Refresh) do.
+function UI:RelayoutFrame()
+  local y = -32 - ROW_STEP - 10
+
+  qualityHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  UpdateSectionHeaderText(qualityHeader)
+  local qualityCollapsed = ns.db.uiCollapsed.quality
+  for _, cb in pairs(qualityCheckboxes) do cb:SetShown(not qualityCollapsed) end
+  if not qualityCollapsed then
+    y = PositionQualityCheckboxes(PADDING + LABEL_COLUMN, y)
+  end
+  y = y - 10
+
+  slotHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  UpdateSectionHeaderText(slotHeader)
+  local slotCollapsed = ns.db.uiCollapsed.slot
+  for _, cb in pairs(slotCheckboxes) do cb:SetShown(not slotCollapsed) end
+  if not slotCollapsed then
+    y = PositionSlotCheckboxes(PADDING + LABEL_COLUMN, y)
+  end
+  y = y - 10
+
+  -- Season/Tier only means something in disenchant mode (#17); the header
+  -- itself is hidden entirely in upgrade mode rather than just collapsed.
+  local isDisenchant = currentMode == "disenchant"
+  seasonHeader:SetShown(isDisenchant)
+  if isDisenchant then
+    seasonHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+    UpdateSectionHeaderText(seasonHeader)
+    local seasonCollapsed = ns.db.uiCollapsed.season
+    adventurerCheckbox:SetShown(not seasonCollapsed)
+    previousSeasonCheckbox:SetShown(not seasonCollapsed)
+    if not seasonCollapsed then
+      adventurerCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
+      y = y - ROW_STEP
+      previousSeasonCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
+      y = y - ROW_STEP
+    end
+    y = y - 10
+  else
+    adventurerCheckbox:Hide()
+    previousSeasonCheckbox:Hide()
+  end
+
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  minLevelBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y + 2)
+  y = y - ROW_STEP - 10
+
+  refreshButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+end
+
 -- Switches the panel between disenchant and upgrade mode (#17): swaps which
--- candidate gate and saved filter values drive the results list, and shows
--- the Season/Tier controls only where they mean something (disenchant).
+-- candidate gate and saved filter values drive the results list.
 function UI:SetMode(mode)
   currentMode = mode
   disenchantModeCheckbox:SetChecked(mode == "disenchant")
@@ -490,10 +580,6 @@ function UI:SetMode(mode)
   frame.title:SetText(ADDON_NAME .. (mode == "upgrade" and " - Upgrade" or " - Disenchant"))
 
   local isDisenchant = mode == "disenchant"
-  seasonLabel:SetShown(isDisenchant)
-  adventurerCheckbox:SetShown(isDisenchant)
-  previousSeasonCheckbox:SetShown(isDisenchant)
-
   local settings = ns.db[mode]
   for quality, cb in pairs(qualityCheckboxes) do
     cb:SetChecked(not settings.excludedQualities[quality])
@@ -508,6 +594,7 @@ function UI:SetMode(mode)
   minLevelBox:SetText(tostring(settings.minLevel))
   maxLevelBox:SetText(tostring(settings.maxLevel))
 
+  self:RelayoutFrame()
   self:Refresh()
 end
 

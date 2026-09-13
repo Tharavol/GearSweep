@@ -25,6 +25,13 @@ end
 
 ns.DEFAULT_SETTINGS = {
   debug = false,
+  -- Per-section collapse state for the sweep window's filter sections
+  -- (#32): all expanded by default, matching prior versions' fixed layout.
+  uiCollapsed = {
+    quality = false,
+    slot = false,
+    season = false,
+  },
   disenchant = {
     excludedQualities = {},
     excludedSlotGroups = {},
