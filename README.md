@@ -17,8 +17,13 @@ Under active development. See the [milestones](../../milestones) and
   Adventurer-tier and previous-season gear are included independently.
   "Pull Selected" moves every checked item into your bags - GearSweep never
   disenchants anything on its own.
-- **Upgrade mode**: not yet implemented (see the
-  [v0.4.0 milestone](../../milestone/4)).
+- **Upgrade mode**: switch the sweep window to Upgrade to filter your bags
+  and bank for equipment your character can actually use - matching
+  Blizzard's own class/armor/weapon proficiency and "Best in Slot"
+  spec-relevance signals - and pre-checks the single highest item level
+  candidate per slot (rings and trinkets: top two, since both are dual-slot;
+  two-hand weapons and one-hand+offhand pairs never both get pre-checked).
+  Uncheck a pre-selected pick or check a runner-up before pulling.
 - Auto-open on visiting the Warband Bank: not yet implemented (see the
   [v0.5.0 milestone](../../milestone/5)).
 
@@ -36,11 +41,13 @@ Under active development. See the [milestones](../../milestones) and
 
 ## Configuration
 
-The sweep window (`/gs`) has its own filter controls - quality, slot, item
-level range, and Adventurer-tier/previous-season toggles - which persist
-between sessions. The settings panel (`/gs options`, or the standard WoW
-AddOns options menu) currently only has diagnostic logging; an auto-open
-toggle lands with [v0.5.0](../../milestone/5).
+The sweep window (`/gs`) has a Mode toggle (Disenchant / Upgrade) plus filter
+controls - quality, slot, and item level range are shared by both modes;
+Adventurer-tier/previous-season toggles only apply to Disenchant. All filter
+values persist between sessions, independently per mode. The settings panel
+(`/gs options`, or the standard WoW AddOns options menu) currently only has
+diagnostic logging; an auto-open toggle lands with
+[v0.5.0](../../milestone/5).
 
 ## License
 

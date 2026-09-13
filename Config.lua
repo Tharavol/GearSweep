@@ -33,4 +33,10 @@ ns.DEFAULT_SETTINGS = {
     minLevel = 1,
     maxLevel = 999,
   },
+  upgrade = {
+    excludedQualities = {},
+    excludedSlotGroups = {},
+    minLevel = 1,
+    maxLevel = 999,
+  },
 }

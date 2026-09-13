@@ -13,6 +13,7 @@ Config.lua
 Core.lua
 Scanner.lua
 Classify.lua
+Upgrade.lua
 UI.lua
 Options.lua
 Commands.lua

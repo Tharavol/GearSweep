@@ -175,6 +175,69 @@ do
 end
 
 --------------------------------------------------------------------------
+-- Upgrade best-per-slot selection (v0.4.0, #16)
+--------------------------------------------------------------------------
+
+ns.Classify = {}
+stubs.loadModule(here .. "/../Upgrade.lua", "GearSweep", ns)
+
+local function item(equipLoc, itemLevel)
+  return { equipLoc = equipLoc, itemLevel = itemLevel }
+end
+
+do
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_HEAD", 480),
+    item("INVTYPE_HEAD", 450),
+  })
+  equals(#best, 1, "a single-slot upgrade picks only one item")
+  equals(best[1].itemLevel, 480, "a single-slot upgrade picks the higher item level")
+end
+
+do
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_FINGER", 470),
+    item("INVTYPE_FINGER", 480),
+    item("INVTYPE_FINGER", 400),
+  })
+  equals(#best, 2, "rings (dual-slot) pick the top two distinct items")
+  local levels = { best[1].itemLevel, best[2].itemLevel }
+  table.sort(levels, function(a, b) return a > b end)
+  equals(levels[1], 480, "rings: the highest item level is selected")
+  equals(levels[2], 470, "rings: the second-highest item level is selected")
+end
+
+do
+  -- No off-hand candidate exists, so the two-hand item is simply the
+  -- highest-level thing that can go in a weapon slot.
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_2HWEAPON", 500),
+    item("INVTYPE_WEAPONMAINHAND", 350),
+  })
+  equals(#best, 1, "two-hand beats a much weaker lone main-hand item")
+  equals(best[1].equipLoc, "INVTYPE_2HWEAPON", "the two-hand item is selected")
+end
+
+do
+  -- A real one-hand+offhand pair fills two independent slots, so it wins
+  -- over a two-hand item even when the two-hand's own level is higher.
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_2HWEAPON", 500),
+    item("INVTYPE_WEAPONMAINHAND", 400),
+    item("INVTYPE_SHIELD", 400),
+  })
+  equals(#best, 2, "a genuine one-hand+offhand pair beats a two-hand item")
+  check(best[1].equipLoc ~= "INVTYPE_2HWEAPON" and best[2].equipLoc ~= "INVTYPE_2HWEAPON",
+    "the two-hand item is not selected alongside the pair")
+end
+
+do
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_WEAPONMAINHAND", 460) })
+  equals(#best, 1, "a lone main-hand candidate is selected on its own")
+  equals(best[1].equipLoc, "INVTYPE_WEAPONMAINHAND", "the main-hand item is selected")
+end
+
+--------------------------------------------------------------------------
 
 print(("%d passed, %d failed"):format(passed, failed))
 for _, failure in ipairs(failures) do

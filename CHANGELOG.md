@@ -21,6 +21,17 @@ All notable changes to GearSweep are documented in this file.
   item level range, and Adventurer-tier/previous-season inclusion; a
   scrollable results list with per-item checkboxes; "Pull Selected" moves
   every checked item into your bags.
+- Upgrade.lua: classifies equipment as usable by the current character
+  (class/armor/weapon proficiency, reusing the same tooltip "usable" signal
+  as Classify.lua) and spec-appropriate, then auto-selects the single
+  highest item-level candidate per slot - rings and trinkets (dual-slot):
+  top two distinct items; two-hand weapons and one-hand+offhand pairs are
+  scored as a set so both never get pre-checked together.
+- A Mode toggle (Disenchant / Upgrade) on the sweep window: Upgrade mode
+  drives the same results list and "Pull Selected" action from
+  upgrade-candidate classification instead, pre-checking only the
+  best-per-slot picks while leaving every other usable candidate visible
+  and selectable.
 
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by

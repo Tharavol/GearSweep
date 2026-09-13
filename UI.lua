@@ -61,15 +61,8 @@ end
 -- Filtering
 --------------------------------------------------------------------------
 
--- The baseline gate (#11) plus the user-adjustable toggles this panel
--- exposes (#12): quality/slot narrowing, item level range, and
--- independently switching Adventurer-tier and previous-season inclusion
--- on or off even though both are baseline-eligible.
-local function PassesFilters(item, filters)
-  if not ns.Classify:IsDisenchantCandidate(item) then
-    return false
-  end
-
+-- Quality/slot/item-level narrowing (#12) shared by both modes.
+local function PassesCommonFilters(item, filters)
   if filters.excludedQualities[item.quality] then
     return false
   end
@@ -85,6 +78,21 @@ local function PassesFilters(item, filters)
     end
   end
 
+  return true
+end
+
+-- The baseline disenchant gate (#11) plus the user-adjustable toggles this
+-- panel exposes (#12): independently switching Adventurer-tier and
+-- previous-season inclusion on or off even though both are baseline-eligible.
+local function PassesDisenchantFilters(item, filters)
+  if not ns.Classify:IsDisenchantCandidate(item) then
+    return false
+  end
+
+  if not PassesCommonFilters(item, filters) then
+    return false
+  end
+
   local isAdventurer = ns.Classify:IsAdventurerTier(item.hyperlink)
   if isAdventurer and not filters.includeAdventurerTier then
     return false
@@ -94,6 +102,16 @@ local function PassesFilters(item, filters)
   end
 
   return true
+end
+
+-- Upgrade mode's candidate gate (#15): usable by class/armor/weapon
+-- proficiency and spec-appropriate, then the same quality/slot/ilvl
+-- narrowing as disenchant mode.
+local function PassesUpgradeFilters(item, filters)
+  if not ns.Upgrade:IsCandidate(item) then
+    return false
+  end
+  return PassesCommonFilters(item, filters)
 end
 
 --------------------------------------------------------------------------
@@ -106,16 +124,21 @@ local MAX_ROWS = 200
 local frame, content, rows, statusText
 local minLevelBox, maxLevelBox
 local qualityCheckboxes, slotCheckboxes, adventurerCheckbox, previousSeasonCheckbox
+local seasonLabel, disenchantModeCheckbox, upgradeModeCheckbox
+
+-- "disenchant" or "upgrade" (#17). Not persisted - the panel always opens
+-- on Disenchant, matching v0.3.0's behavior for players who never switch.
+local currentMode = "disenchant"
 
 local function BuildFilters()
-  local disenchant = ns.db.disenchant
+  local settings = ns.db[currentMode]
   return {
-    excludedQualities = disenchant.excludedQualities,
-    excludedSlotGroups = disenchant.excludedSlotGroups,
-    includeAdventurerTier = disenchant.includeAdventurerTier,
-    includePreviousSeason = disenchant.includePreviousSeason,
-    minLevel = tonumber(minLevelBox:GetText()) or disenchant.minLevel,
-    maxLevel = tonumber(maxLevelBox:GetText()) or disenchant.maxLevel,
+    excludedQualities = settings.excludedQualities,
+    excludedSlotGroups = settings.excludedSlotGroups,
+    includeAdventurerTier = ns.db.disenchant.includeAdventurerTier,
+    includePreviousSeason = ns.db.disenchant.includePreviousSeason,
+    minLevel = tonumber(minLevelBox:GetText()) or settings.minLevel,
+    maxLevel = tonumber(maxLevelBox:GetText()) or settings.maxLevel,
   }
 end
 
@@ -159,28 +182,47 @@ local function GetOrCreateRow(index)
 end
 
 -- Re-scans and re-populates the results list from current filter values.
+-- In upgrade mode, every candidate is listed but only the best-per-slot
+-- picks (#16) start checked - #17 asks that the rest stay visible and
+-- selectable, not hidden, so the player can still grab a runner-up by hand.
 function UI:Refresh()
   local filters = BuildFilters()
   local items = ns.Scanner:ScanAll()
   local shown = 0
 
+  local matching = {}
   for _, item in ipairs(items) do
-    if PassesFilters(item, filters) then
-      shown = shown + 1
-      if shown <= MAX_ROWS then
-        local row = GetOrCreateRow(shown)
-        row.item = item
-        row.checkbox:SetChecked(true)
-        row.icon:SetTexture(select(10, C_Item.GetItemInfo(item.hyperlink)))
-        local r, g, b = GetQualityColor(item.quality)
-        row.name:SetText(item.name or item.hyperlink)
-        row.name:SetTextColor(r, g, b)
-        row.ilvl:SetText(tostring(item.itemLevel or "?"))
-        local group = EQUIP_LOC_TO_GROUP[item.equipLoc]
-        row.slot:SetText(group and group.label or item.equipLoc or "?")
-        row.source:SetText(item.source or "?")
-        row:Show()
-      end
+    local ok = (currentMode == "upgrade")
+      and PassesUpgradeFilters(item, filters)
+      or PassesDisenchantFilters(item, filters)
+    if ok then
+      table.insert(matching, item)
+    end
+  end
+
+  local preChecked
+  if currentMode == "upgrade" then
+    preChecked = {}
+    for _, item in ipairs(ns.Upgrade:SelectBest(matching)) do
+      preChecked[item] = true
+    end
+  end
+
+  for _, item in ipairs(matching) do
+    shown = shown + 1
+    if shown <= MAX_ROWS then
+      local row = GetOrCreateRow(shown)
+      row.item = item
+      row.checkbox:SetChecked(preChecked == nil or preChecked[item] == true)
+      row.icon:SetTexture(select(10, C_Item.GetItemInfo(item.hyperlink)))
+      local r, g, b = GetQualityColor(item.quality)
+      row.name:SetText(item.name or item.hyperlink)
+      row.name:SetTextColor(r, g, b)
+      row.ilvl:SetText(tostring(item.itemLevel or "?"))
+      local group = EQUIP_LOC_TO_GROUP[item.equipLoc]
+      row.slot:SetText(group and group.label or item.equipLoc or "?")
+      row.source:SetText(item.source or "?")
+      row:Show()
     end
   end
 
@@ -248,7 +290,7 @@ local function CreateQualityCheckboxes(parent, x, yTop)
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, yTop - (i - 1) * ROW_STEP)
     cb.Text:SetText(def.label)
     cb:SetScript("OnClick", function(self)
-      ns.db.disenchant.excludedQualities[def.quality] = (not self:GetChecked()) or nil
+      ns.db[currentMode].excludedQualities[def.quality] = (not self:GetChecked()) or nil
     end)
     checkboxes[def.quality] = cb
   end
@@ -270,7 +312,7 @@ local function CreateSlotCheckboxes(parent, x, yTop)
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x + col * columnWidth, yTop - row * ROW_STEP)
     cb.Text:SetText(group.label)
     cb:SetScript("OnClick", function(self)
-      ns.db.disenchant.excludedSlotGroups[group.id] = (not self:GetChecked()) or nil
+      ns.db[currentMode].excludedSlotGroups[group.id] = (not self:GetChecked()) or nil
     end)
     checkboxes[group.id] = cb
   end
@@ -291,11 +333,27 @@ local function CreatePanel()
 
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
-  frame.title:SetText(ADDON_NAME .. " - Disenchant")
 
   local PADDING = 16
   local LABEL_COLUMN = 100
   local y = -32
+
+  local modeLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  modeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  modeLabel:SetText("Mode")
+
+  disenchantModeCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+  disenchantModeCheckbox:SetSize(20, 20)
+  disenchantModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
+  disenchantModeCheckbox.Text:SetText("Disenchant")
+  disenchantModeCheckbox:SetScript("OnClick", function() UI:SetMode("disenchant") end)
+
+  upgradeModeCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+  upgradeModeCheckbox:SetSize(20, 20)
+  upgradeModeCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN + 130, y)
+  upgradeModeCheckbox.Text:SetText("Upgrade")
+  upgradeModeCheckbox:SetScript("OnClick", function() UI:SetMode("upgrade") end)
+  y = y - ROW_STEP - 10
 
   local qualityLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   qualityLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
@@ -309,7 +367,7 @@ local function CreatePanel()
   slotLabel:SetText("Slot")
   y = y - 10
 
-  local seasonLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  seasonLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   seasonLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   seasonLabel:SetText("Season / Tier")
 
@@ -341,7 +399,7 @@ local function CreatePanel()
   minLevelBox:SetNumeric(true)
   minLevelBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y + 2)
   minLevelBox:SetScript("OnEnterPressed", function(self)
-    ns.db.disenchant.minLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS.disenchant.minLevel
+    ns.db[currentMode].minLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS[currentMode].minLevel
     self:ClearFocus()
   end)
 
@@ -355,7 +413,7 @@ local function CreatePanel()
   maxLevelBox:SetNumeric(true)
   maxLevelBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
   maxLevelBox:SetScript("OnEnterPressed", function(self)
-    ns.db.disenchant.maxLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS.disenchant.maxLevel
+    ns.db[currentMode].maxLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS[currentMode].maxLevel
     self:ClearFocus()
   end)
   y = y - ROW_STEP - 10
@@ -398,19 +456,39 @@ local function CreatePanel()
   pullButton:SetScript("OnClick", PullSelected)
 
   frame:SetScript("OnShow", function()
-    local disenchant = ns.db.disenchant
-    for quality, cb in pairs(qualityCheckboxes) do
-      cb:SetChecked(not disenchant.excludedQualities[quality])
-    end
-    for id, cb in pairs(slotCheckboxes) do
-      cb:SetChecked(not disenchant.excludedSlotGroups[id])
-    end
-    adventurerCheckbox:SetChecked(disenchant.includeAdventurerTier)
-    previousSeasonCheckbox:SetChecked(disenchant.includePreviousSeason)
-    minLevelBox:SetText(tostring(disenchant.minLevel))
-    maxLevelBox:SetText(tostring(disenchant.maxLevel))
-    UI:Refresh()
+    UI:SetMode(currentMode)
   end)
+end
+
+-- Switches the panel between disenchant and upgrade mode (#17): swaps which
+-- candidate gate and saved filter values drive the results list, and shows
+-- the Season/Tier controls only where they mean something (disenchant).
+function UI:SetMode(mode)
+  currentMode = mode
+  disenchantModeCheckbox:SetChecked(mode == "disenchant")
+  upgradeModeCheckbox:SetChecked(mode == "upgrade")
+  frame.title:SetText(ADDON_NAME .. (mode == "upgrade" and " - Upgrade" or " - Disenchant"))
+
+  local isDisenchant = mode == "disenchant"
+  seasonLabel:SetShown(isDisenchant)
+  adventurerCheckbox:SetShown(isDisenchant)
+  previousSeasonCheckbox:SetShown(isDisenchant)
+
+  local settings = ns.db[mode]
+  for quality, cb in pairs(qualityCheckboxes) do
+    cb:SetChecked(not settings.excludedQualities[quality])
+  end
+  for id, cb in pairs(slotCheckboxes) do
+    cb:SetChecked(not settings.excludedSlotGroups[id])
+  end
+  if isDisenchant then
+    adventurerCheckbox:SetChecked(ns.db.disenchant.includeAdventurerTier)
+    previousSeasonCheckbox:SetChecked(ns.db.disenchant.includePreviousSeason)
+  end
+  minLevelBox:SetText(tostring(settings.minLevel))
+  maxLevelBox:SetText(tostring(settings.maxLevel))
+
+  self:Refresh()
 end
 
 function UI:Show()
