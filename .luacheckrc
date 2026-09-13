@@ -27,7 +27,7 @@ read_globals = {
     "C_AddOns", "C_Bank", "C_Container", "C_Item", "C_PlayerInfo", "C_Timer", "Enum",
 
     -- Frame / UI globals
-    "CreateFrame", "UIParent", "Settings", "GameTooltip",
+    "CreateFrame", "UIParent", "Settings", "GameTooltip", "C_TooltipInfo",
 
     -- Addon metadata
     "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",

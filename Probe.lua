@@ -68,5 +68,70 @@ SlashCmdList["GSPROBE"] = function(msg)
     return
   end
 
-  print("GSProbe commands: /gsprobe bags | /gsprobe api | /gsprobe item (hover an item first)")
+  if msg == "banktabs" then
+    for i = -4, -1 do
+      local ok, n = pcall(C_Container.GetContainerNumSlots, i)
+      print(("GSProbe bag %d: ok=%s slots=%s"):format(i, tostring(ok), tostring(n)))
+    end
+
+    local ok, types = pcall(C_Bank.FetchViewableBankTypes)
+    print("GSProbe FetchViewableBankTypes ok=" .. tostring(ok), types and table.concat(types, ",") or tostring(types))
+
+    if ok and types then
+      for _, bankType in ipairs(types) do
+        local ok2, numTabs = pcall(C_Bank.FetchNumPurchasedBankTabs, bankType)
+        print(("GSProbe bankType %s: FetchNumPurchasedBankTabs ok=%s -> %s"):format(
+          tostring(bankType), tostring(ok2), tostring(numTabs)))
+
+        local ok3, ids = pcall(C_Bank.FetchPurchasedBankTabIDs, bankType)
+        print(("GSProbe bankType %s: FetchPurchasedBankTabIDs ok=%s -> %s"):format(
+          tostring(bankType), tostring(ok3), ids and table.concat(ids, ",") or tostring(ids)))
+      end
+    end
+    return
+  end
+
+  if msg == "tooltip" then
+    local _, link = GameTooltip:GetItem()
+    if not link then
+      print("GSProbe: no item under the tooltip - hover an item, then run this without moving the mouse")
+      return
+    end
+
+    if not C_TooltipInfo then
+      print("GSProbe: C_TooltipInfo does not exist")
+      return
+    end
+
+    local data = C_TooltipInfo.GetHyperlink(link)
+    if not data then
+      print("GSProbe: C_TooltipInfo.GetHyperlink returned nothing")
+      return
+    end
+
+    print("GSProbe tooltipData top-level keys:")
+    for k, v in pairs(data) do
+      if type(v) ~= "table" then
+        print(("  %s = %s"):format(tostring(k), tostring(v)))
+      else
+        print(("  %s = <table>"):format(tostring(k)))
+      end
+    end
+
+    if type(data.lines) == "table" then
+      print(("GSProbe tooltipData.lines (%d):"):format(#data.lines))
+      for i, line in ipairs(data.lines) do
+        local parts = {}
+        for k, v in pairs(line) do
+          if type(v) ~= "table" then
+            table.insert(parts, ("%s=%s"):format(tostring(k), tostring(v)))
+          end
+        end
+        print(("  [%d] %s"):format(i, table.concat(parts, ", ")))
+      end
+    end
+    return
+  end
+
+  print("GSProbe commands: /gsprobe bags | /gsprobe api | /gsprobe item | /gsprobe banktabs | /gsprobe tooltip")
 end
