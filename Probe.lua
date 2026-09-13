@@ -223,5 +223,25 @@ SlashCmdList["GSPROBE"] = function(msg)
     return
   end
 
-  print("GSProbe commands: bags | api | item | banktabs | tooltip | hidden | scan | classify | roundtrip <bag> <slot>")
+  if msg == "iteminfo" then
+    local _, link = GameTooltip:GetItem()
+    if not link then
+      print("GSProbe: no item under the tooltip - hover an item, then run this without moving the mouse")
+      return
+    end
+
+    -- Captured positionally (not via {...} + ipairs) so an embedded nil
+    -- doesn't truncate the dump early.
+    local r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17 =
+      C_Item.GetItemInfo(link)
+    local values = { r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17 }
+    print("GSProbe GetItemInfo(" .. link .. "):")
+    for i = 1, 17 do
+      print(("  [%d] %s (%s)"):format(i, tostring(values[i]), type(values[i])))
+    end
+    return
+  end
+
+  print("GSProbe commands: bags | api | item | banktabs | tooltip | hidden | scan | classify")
+  print("  | iteminfo | roundtrip <bag> <slot>")
 end
