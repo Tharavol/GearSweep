@@ -43,10 +43,12 @@ end
 
 -- Tries the modern color API first, falls back to the long-standing global
 -- table, and finally plain white - cosmetic only, never worth erroring on.
+-- Confirmed live: C_Item.GetItemQualityColor returns plain r, g, b (...)
+-- numbers directly, not a color table/object.
 local function GetQualityColor(quality)
   if C_Item and C_Item.GetItemQualityColor then
-    local color = C_Item.GetItemQualityColor(quality)
-    if color then return color.r, color.g, color.b end
+    local r, g, b = C_Item.GetItemQualityColor(quality)
+    if r then return r, g, b end
   end
   if ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality] then
     local c = ITEM_QUALITY_COLORS[quality]
