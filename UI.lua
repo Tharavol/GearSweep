@@ -237,7 +237,6 @@ local function CreateQualityCheckboxes(parent, anchor)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
     cb:SetPoint("TOPLEFT", prev, prev == anchor and "TOPLEFT" or "BOTTOMLEFT", prev == anchor and 100 or 0, -4)
-    cb.Text = _G[cb:GetName() .. "Text"]
     cb.Text:SetText(def.label)
     cb:SetScript("OnClick", function(self)
       ns.db.disenchant.excludedQualities[def.quality] = (not self:GetChecked()) or nil
@@ -263,7 +262,6 @@ local function CreateSlotCheckboxes(parent, anchor)
     else
       cb:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -4)
     end
-    cb.Text = _G[cb:GetName() .. "Text"]
     cb.Text:SetText(group.label)
     cb:SetScript("OnClick", function(self)
       ns.db.disenchant.excludedSlotGroups[group.id] = (not self:GetChecked()) or nil
@@ -306,7 +304,6 @@ local function CreatePanel()
   adventurerCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   adventurerCheckbox:SetSize(20, 20)
   adventurerCheckbox:SetPoint("TOPLEFT", seasonLabel, "TOPLEFT", 100, 4)
-  adventurerCheckbox.Text = _G[adventurerCheckbox:GetName() .. "Text"]
   adventurerCheckbox.Text:SetText("Adventurer tier (current season)")
   adventurerCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includeAdventurerTier = self:GetChecked() and true or false
@@ -315,7 +312,6 @@ local function CreatePanel()
   previousSeasonCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   previousSeasonCheckbox:SetSize(20, 20)
   previousSeasonCheckbox:SetPoint("TOPLEFT", adventurerCheckbox, "BOTTOMLEFT", 0, -4)
-  previousSeasonCheckbox.Text = _G[previousSeasonCheckbox:GetName() .. "Text"]
   previousSeasonCheckbox.Text:SetText("Previous season / expansion")
   previousSeasonCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includePreviousSeason = self:GetChecked() and true or false
