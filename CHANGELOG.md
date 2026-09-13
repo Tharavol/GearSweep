@@ -59,3 +59,10 @@ All notable changes to GearSweep are documented in this file.
   (e.g. item level ~100-141 quest rewards, against item level 238 equipped
   gear) - "usable" and "spec-appropriate" alone don't mean "better than
   what you're wearing."
+- The sweep window didn't close on Escape like other standard windows
+  (#29): now registered with `UISpecialFrames`.
+- The sweep window's frame layer was mixed with bag/bank container frames
+  instead of consistently on top (#30): with bags and the Warband Bank
+  open, it rendered interleaved with them, with other addons' UI showing
+  through in the gaps. Now uses an explicit "HIGH" strata and toplevel,
+  matching those windows.

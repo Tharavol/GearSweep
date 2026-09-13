@@ -27,6 +27,7 @@ read_globals = {
 
     -- Frame / UI globals
     "CreateFrame", "UIParent", "Settings", "GameTooltip", "C_TooltipInfo",
+    "tinsert", "UISpecialFrames",
 
     -- Addon metadata
     "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",

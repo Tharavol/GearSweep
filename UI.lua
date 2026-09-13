@@ -331,6 +331,19 @@ local function CreatePanel()
   frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
   frame:Hide()
 
+  -- Without an explicit strata this defaults to "MEDIUM", below the
+  -- bag/bank container frames it's meant to be used alongside (#30) -
+  -- confirmed live: with bags and the Warband Bank open, GearSweep
+  -- rendered interleaved with them, with other addons' UI showing through
+  -- in the gaps. "HIGH" plus SetToplevel matches those windows and raises
+  -- this one on click, same as they do.
+  frame:SetFrameStrata("HIGH")
+  frame:SetToplevel(true)
+
+  -- Registers this frame with Blizzard's default UI so Escape closes it
+  -- like any other standard window (#29).
+  tinsert(UISpecialFrames, "GearSweepFrame")
+
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
 
