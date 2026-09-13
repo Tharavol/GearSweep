@@ -12,27 +12,32 @@ local ADDON_NAME, ns = ...
 local Commands = {}
 ns.Commands = Commands
 
-local function OpenPanel() ns.Options:Open() end
+local function OpenSweep() ns.UI:Show() end
+local function OpenOptions() ns.Options:Open() end
 
 -- Forward-declared so the "help" entry below can close over it before its
 -- body (which needs COMMANDS to exist) is assigned further down.
 local PrintUsage
 
--- "", "config" and "gui" are silent aliases of "options": each opens the
--- panel but carries no help text of its own, so PrintUsage doesn't repeat
--- the same line four times.
+-- "config" and "gui" are silent aliases of "options": each opens the
+-- settings panel but carries no help text of its own, so PrintUsage
+-- doesn't repeat the same line three times. The bare command opens the
+-- main sweep window instead - that's the addon's actual feature.
 local COMMANDS = {
-  { name = "", help = {}, handler = OpenPanel },
+  {
+    name = "",
+    help = { "|cffffff00/gs|r, |cffffff00/gearsweep|r - open the disenchant sweep window" },
+    handler = OpenSweep,
+  },
   {
     name = "options",
     help = {
-      "|cffffff00/gs|r, |cffffff00/gs options|r, |cffffff00/gs config|r, "
-        .. "|cffffff00/gs gui|r - open the settings panel",
+      "|cffffff00/gs options|r, |cffffff00/gs config|r, |cffffff00/gs gui|r - open the settings panel",
     },
-    handler = OpenPanel,
+    handler = OpenOptions,
   },
-  { name = "config", help = {}, handler = OpenPanel },
-  { name = "gui", help = {}, handler = OpenPanel },
+  { name = "config", help = {}, handler = OpenOptions },
+  { name = "gui", help = {}, handler = OpenOptions },
   {
     name = "debug",
     help = { "|cffffff00/gs debug [on|off]|r - toggle or set diagnostic messages" },
@@ -68,7 +73,7 @@ local COMMANDS = {
     help = { "|cffffff00/gs reset|r - restore settings to defaults" },
     handler = function()
       for key, value in pairs(ns.DEFAULT_SETTINGS) do
-        ns.db[key] = value
+        ns.db[key] = ns.DeepCopy(value)
       end
       ns.Print("Settings restored to defaults.")
     end,

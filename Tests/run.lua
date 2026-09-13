@@ -43,13 +43,29 @@ local ns = {
   end,
 }
 
-ns.DEFAULT_SETTINGS = { debug = false }
-ns.db = { debug = false }
+local function deepCopy(value)
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for k, v in pairs(value) do copy[k] = deepCopy(v) end
+  return copy
+end
+ns.DeepCopy = deepCopy
 
-local optionsOpened
+ns.DEFAULT_SETTINGS = {
+  debug = false,
+  disenchant = { excludedQualities = {}, includeAdventurerTier = true },
+}
+ns.db = deepCopy(ns.DEFAULT_SETTINGS)
+
+local optionsOpened, sweepOpened
 ns.Options = {
   Open = function(_self)
     optionsOpened = true
+  end,
+}
+ns.UI = {
+  Show = function(_self)
+    sweepOpened = true
   end,
 }
 
@@ -85,10 +101,10 @@ do
 end
 
 do
-  optionsOpened = false
+  sweepOpened = false
   dispatch("")
-  check(optionsOpened, "an empty command opens the settings panel")
-  equals(#printedMessages, 0, "opening the panel prints nothing")
+  check(sweepOpened, "an empty command opens the sweep window")
+  equals(#printedMessages, 0, "opening the sweep window prints nothing")
 end
 
 do
@@ -149,6 +165,13 @@ do
   dispatch("reset")
   equals(ns.db.debug, false, "reset restores debug to its default")
   equals(printedMessages[1], "Settings restored to defaults.", "reset confirms what it did")
+
+  -- A reset that assigns a nested default table by reference would let a
+  -- later mutation of ns.db.disenchant corrupt DEFAULT_SETTINGS.disenchant
+  -- itself, silently breaking every future reset.
+  ns.db.disenchant.excludedQualities[2] = true
+  check(ns.DEFAULT_SETTINGS.disenchant.excludedQualities[2] == nil,
+    "reset deep-copies nested default tables instead of sharing them")
 end
 
 --------------------------------------------------------------------------

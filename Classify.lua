@@ -152,3 +152,28 @@ function Classify:IsSpecAppropriate(link)
 
   return false
 end
+
+-- Uncommon (green), Rare (blue), Epic (purple). Poor and Common (white) -
+-- shirts included, since those are Common anyway - are never disenchant
+-- material.
+local DISENCHANT_QUALITIES = { [2] = true, [3] = true, [4] = true }
+
+function Classify:IsDisenchantEligibleQuality(quality)
+  return DISENCHANT_QUALITIES[quality] == true
+end
+
+-- The baseline definition of a disenchant candidate (#11): eligible
+-- quality, and either Adventurer tier (current season's lowest track) or
+-- from a previous season/expansion entirely. Never true for current-season
+-- gear above Adventurer tier. Scanner only enumerates bags/bank contents,
+-- never equipped-item slots, so a currently-equipped item can never reach
+-- this check in the first place.
+function Classify:IsDisenchantCandidate(item)
+  if not self:IsDisenchantEligibleQuality(item.quality) then
+    return false
+  end
+
+  local isAdventurer = self:IsAdventurerTier(item.hyperlink)
+  local isPreviousSeason = not self:IsCurrentSeason(item.hyperlink)
+  return isAdventurer or isPreviousSeason
+end

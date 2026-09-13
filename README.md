@@ -8,25 +8,26 @@ class and specialization.
 Under active development. See the [milestones](../../milestones) and
 [issues](../../issues) for the current plan and status.
 
-## Planned features
+## Features
 
-- Opens automatically when you visit the bank/Warband Bank, or via
-  `/gearsweep` (alias `/gs`).
-- Filter by item level, slot, quality, and season/tier (current season vs.
-  Adventurer-tier / previous seasons).
-- Disenchant mode: surfaces Uncommon/Rare/Epic equipment that's obsolete,
-  ignoring non-gear whites like shirts and tabards.
-- Upgrade mode: surfaces equipment your character can use and that's
-  appropriate for your current specialization, auto-selecting the highest
-  item level per slot.
-- One button to pull everything selected into your bags. GearSweep never
-  disenchants or equips anything on its own.
+- **Disenchant mode**: filters your bags and every bank tab (character bank
+  and Warband Bank) for Uncommon/Rare/Epic equipment that's Adventurer-tier
+  and/or from a previous season, ignoring non-gear whites like shirts and
+  tabards. Filter further by quality, slot, item level range, and whether
+  Adventurer-tier and previous-season gear are included independently.
+  "Pull Selected" moves every checked item into your bags - GearSweep never
+  disenchants anything on its own.
+- **Upgrade mode**: not yet implemented (see the
+  [v0.4.0 milestone](../../milestone/4)).
+- Auto-open on visiting the Warband Bank: not yet implemented (see the
+  [v0.5.0 milestone](../../milestone/5)).
 
 ## Slash Commands
 
 | Command | Description |
 |---|---|
-| `/gearsweep` or `/gs` | Opens the GearSweep options panel (also: `options`, `config`, `gui`). |
+| `/gearsweep` or `/gs` | Opens the disenchant sweep window. |
+| `/gs options` | Opens the settings panel (also: `config`, `gui`). |
 | `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
 | `/gs status` | Shows current settings. |
 | `/gs version` | Shows the addon version. |
@@ -35,10 +36,11 @@ Under active development. See the [milestones](../../milestones) and
 
 ## Configuration
 
-Open the options panel with `/gs` (or via the standard WoW AddOns options
-menu). Only diagnostic logging is configurable so far; filter and mode
-options land as disenchant and upgrade mode are implemented (see
-[milestones](../../milestones)).
+The sweep window (`/gs`) has its own filter controls - quality, slot, item
+level range, and Adventurer-tier/previous-season toggles - which persist
+between sessions. The settings panel (`/gs options`, or the standard WoW
+AddOns options menu) currently only has diagnostic logging; an auto-open
+toggle lands with [v0.5.0](../../milestone/5).
 
 ## License
 

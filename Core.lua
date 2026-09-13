@@ -22,7 +22,7 @@ frame:SetScript("OnEvent", function(self, event, addon)
     ns.db = GearSweepDB
     for key, value in pairs(ns.DEFAULT_SETTINGS) do
       if ns.db[key] == nil then
-        ns.db[key] = value
+        ns.db[key] = ns.DeepCopy(value)
       end
     end
     self:UnregisterEvent("ADDON_LOADED")
