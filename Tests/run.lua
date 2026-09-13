@@ -144,7 +144,7 @@ do
   ns.db.debug = true
   dispatch("debug yes")
   equals(ns.db.debug, true, "an invalid value leaves the setting unchanged")
-  equals(printedMessages[1], "'yes' - expected 'on' or 'off'.",
+  equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', or 'upgrades'.",
     "an invalid value is rejected with a specific error")
   ns.db.debug = false
 end
@@ -294,6 +294,20 @@ do
 
   GetInventoryItemLink = function() return nil end
   C_Item.GetDetailedItemLevelInfo = function() return nil end
+end
+
+do
+  -- #28: debug subcommands dispatch to Upgrade.lua's dump helpers rather
+  -- than being silently swallowed like an unrecognised debug argument.
+  local slotsCalled, upgradesCalled = false, false
+  ns.Upgrade.DumpEquippedSlots = function() slotsCalled = true end
+  ns.Upgrade.DumpSelectedUpgrades = function() upgradesCalled = true end
+
+  dispatch("debug slots")
+  check(slotsCalled, "debug slots dispatches to Upgrade:DumpEquippedSlots")
+
+  dispatch("debug upgrades")
+  check(upgradesCalled, "debug upgrades dispatches to Upgrade:DumpSelectedUpgrades")
 end
 
 --------------------------------------------------------------------------

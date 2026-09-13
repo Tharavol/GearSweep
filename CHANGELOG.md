@@ -34,6 +34,11 @@ All notable changes to GearSweep are documented in this file.
   upgrade-candidate classification instead, pre-checking only the
   best-per-slot picks while leaving every other usable candidate visible
   and selectable.
+- `/gs debug slots` and `/gs debug upgrades` (#28): print current item
+  level in every equipment slot, and the items Upgrade mode currently
+  selects alongside the equipped item level each was compared against -
+  diagnostics for tracking down why Upgrade mode's candidate set doesn't
+  match expectations against real, live gear.
 
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by

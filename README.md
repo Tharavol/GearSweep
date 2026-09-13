@@ -36,6 +36,8 @@ Under active development. See the [milestones](../../milestones) and
 | `/gearsweep` or `/gs` | Opens the disenchant sweep window. |
 | `/gs options` | Opens the settings panel (also: `config`, `gui`). |
 | `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
+| `/gs debug slots` | Prints current item level in every equipment slot. |
+| `/gs debug upgrades` | Prints the items Upgrade mode currently selects, and the equipped item level each was compared against. |
 | `/gs status` | Shows current settings. |
 | `/gs version` | Shows the addon version. |
 | `/gs reset` | Restores settings to defaults. |

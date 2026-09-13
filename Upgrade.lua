@@ -60,34 +60,42 @@ local EQUIP_LOC_TO_INVENTORY_SLOTS = {
   INVTYPE_RELIC = { "SecondaryHandSlot" },
 }
 
+-- Every physical equipment slot, for the #28 debug dump - not otherwise
+-- iterated over as a group, since IsUpgradeOverEquipped only looks up the
+-- specific slot(s) an item's equipLoc maps to.
+local ALL_INVENTORY_SLOTS = {
+  "HeadSlot", "NeckSlot", "ShoulderSlot", "BackSlot", "ChestSlot", "WaistSlot",
+  "LegsSlot", "FeetSlot", "WristSlot", "HandsSlot", "Finger0Slot", "Finger1Slot",
+  "Trinket0Slot", "Trinket1Slot", "MainHandSlot", "SecondaryHandSlot",
+}
+
+-- Returns the equipped item's level, its link, and the slot's numeric ID -
+-- the link/ID are only for #28's debug dump, which needs to show what's
+-- actually equipped, not just the number IsUpgradeOverEquipped computes.
 local function GetEquippedItemLevel(slotName)
   local slotID = GetInventorySlotInfo(slotName)
   if not slotID then
-    return 0
+    return 0, nil, nil
   end
   local link = GetInventoryItemLink("player", slotID)
   if not link then
-    return 0
+    return 0, nil, slotID
   end
   local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)
   if not level then
     level = select(4, C_Item.GetItemInfo(link))
   end
-  return level or 0
+  return level or 0, link, slotID
 end
 
--- True when the item's own level beats the equipped item it would actually
--- replace - the lower of the two equipped items for dual-slot types
+-- The equipped item level an equip location's candidates are compared
+-- against: the lower of the two equipped items for dual-slot types
 -- (finger/trinket), the one equipped item otherwise. An empty slot reads
--- as item level 0, so anything real counts as an upgrade there. This is
--- the actual "is it an upgrade" check (#16) - IsUsable/IsSpecAppropriate
--- alone only say the item is wearable, not that it's better than current
--- gear (confirmed live: an ilvl ~100-141 quest reward otherwise passed
--- those checks and was wrongly listed against ilvl 238 equipped gear).
-function Upgrade:IsUpgradeOverEquipped(item)
-  local slots = EQUIP_LOC_TO_INVENTORY_SLOTS[item.equipLoc]
+-- as item level 0.
+function Upgrade:GetBaselineItemLevel(equipLoc)
+  local slots = EQUIP_LOC_TO_INVENTORY_SLOTS[equipLoc]
   if not slots then
-    return true
+    return nil
   end
 
   local baseline
@@ -97,8 +105,55 @@ function Upgrade:IsUpgradeOverEquipped(item)
       baseline = level
     end
   end
+  return baseline or 0
+end
 
-  return (item.itemLevel or 0) > (baseline or 0)
+-- True when the item's own level beats the equipped item it would actually
+-- replace (see GetBaselineItemLevel). This is the actual "is it an
+-- upgrade" check (#16) - IsUsable/IsSpecAppropriate alone only say the
+-- item is wearable, not that it's better than current gear (confirmed
+-- live: an ilvl ~100-141 quest reward otherwise passed those checks and
+-- was wrongly listed against ilvl 238 equipped gear).
+function Upgrade:IsUpgradeOverEquipped(item)
+  local baseline = self:GetBaselineItemLevel(item.equipLoc)
+  if baseline == nil then
+    return true
+  end
+  return (item.itemLevel or 0) > baseline
+end
+
+-- #28 debug dump: every equipment slot's currently-equipped item and level,
+-- so a live report can be compared directly against what Upgrade mode is
+-- (or isn't) treating as an upgrade.
+function Upgrade:DumpEquippedSlots()
+  ns.Print("Equipped item levels:")
+  for _, slotName in ipairs(ALL_INVENTORY_SLOTS) do
+    local level, link = GetEquippedItemLevel(slotName)
+    print(("  %s: %s (ilvl %d)"):format(slotName, link or "(empty)", level))
+  end
+end
+
+-- #28 debug dump: re-runs the exact same candidate/select pipeline the
+-- sweep window's Upgrade mode uses, printing each selected item alongside
+-- the equipped item level it was actually compared against.
+function Upgrade:DumpSelectedUpgrades()
+  local scanned = ns.Scanner:ScanAll()
+  local candidates = {}
+  for _, item in ipairs(scanned) do
+    if self:IsCandidate(item) then
+      table.insert(candidates, item)
+    end
+  end
+
+  local best = self:SelectBest(candidates)
+  ns.Print("%d upgrade(s) selected (of %d usable/spec-appropriate/higher-ilvl candidates):",
+    #best, #candidates)
+  for _, item in ipairs(best) do
+    local baseline = self:GetBaselineItemLevel(item.equipLoc)
+    print(("  %s: ilvl %d vs. equipped ilvl %s (%s, %s)"):format(
+      item.name or item.hyperlink, item.itemLevel or 0, tostring(baseline),
+      item.equipLoc or "?", item.source or "?"))
+  end
 end
 
 -- Whether the character can actually use the item (class/armor/weapon

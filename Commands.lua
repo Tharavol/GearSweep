@@ -40,7 +40,11 @@ local COMMANDS = {
   { name = "gui", help = {}, handler = OpenOptions },
   {
     name = "debug",
-    help = { "|cffffff00/gs debug [on|off]|r - toggle or set diagnostic messages" },
+    help = {
+      "|cffffff00/gs debug [on|off]|r - toggle or set diagnostic messages",
+      "|cffffff00/gs debug slots|r - print current item level in every equipment slot",
+      "|cffffff00/gs debug upgrades|r - print the items Upgrade mode currently selects",
+    },
     handler = function(_, rest)
       if rest == "on" then
         ns.db.debug = true
@@ -48,8 +52,14 @@ local COMMANDS = {
         ns.db.debug = false
       elseif rest == "" then
         ns.db.debug = not ns.db.debug
+      elseif rest == "slots" then
+        ns.Upgrade:DumpEquippedSlots()
+        return
+      elseif rest == "upgrades" then
+        ns.Upgrade:DumpSelectedUpgrades()
+        return
       else
-        ns.Print("'%s' - expected 'on' or 'off'.", rest)
+        ns.Print("'%s' - expected 'on', 'off', 'slots', or 'upgrades'.", rest)
         return
       end
       ns.Print("Debug messages are %s.", ns.db.debug and "|cff00ff00on|r" or "|cffff0000off|r")
