@@ -66,3 +66,8 @@ All notable changes to GearSweep are documented in this file.
   open, it rendered interleaved with them, with other addons' UI showing
   through in the gaps. Now uses an explicit "HIGH" strata and toplevel,
   matching those windows.
+- Upgrade mode showed disenchant-eligible junk (ilvl 14-141 items against
+  ilvl 238 equipped gear) alongside real upgrades (#31): a `X and Y or Z`
+  expression in UI.lua's mode dispatch fell through to the disenchant gate
+  whenever the upgrade gate returned false, the common case, instead of
+  correctly excluding the item.

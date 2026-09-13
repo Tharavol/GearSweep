@@ -190,11 +190,18 @@ function UI:Refresh()
   local items = ns.Scanner:ScanAll()
   local shown = 0
 
+  -- Deliberately not `(currentMode == "upgrade") and X or Y`: when X is
+  -- false (the common case - most scanned items aren't upgrades), that
+  -- idiom falls through to Y instead of staying false, silently letting
+  -- disenchant-eligible junk back into the Upgrade mode results (#31).
   local matching = {}
   for _, item in ipairs(items) do
-    local ok = (currentMode == "upgrade")
-      and PassesUpgradeFilters(item, filters)
-      or PassesDisenchantFilters(item, filters)
+    local ok
+    if currentMode == "upgrade" then
+      ok = PassesUpgradeFilters(item, filters)
+    else
+      ok = PassesDisenchantFilters(item, filters)
+    end
     if ok then
       table.insert(matching, item)
     end
