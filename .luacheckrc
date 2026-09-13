@@ -18,6 +18,7 @@ globals = {
 
     "SLASH_GEARSWEEP1",
     "SLASH_GEARSWEEP2",
+    "SLASH_GSPROBE1", -- Probe.lua, temporary (v0.2.0)
     "SlashCmdList",
 }
 
@@ -26,10 +27,13 @@ read_globals = {
     "C_AddOns", "C_Bank", "C_Container", "C_Item", "C_PlayerInfo", "C_Timer", "Enum",
 
     -- Frame / UI globals
-    "CreateFrame", "UIParent", "Settings",
+    "CreateFrame", "UIParent", "Settings", "GameTooltip",
 
     -- Addon metadata
     "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",
+
+    -- Probe.lua only (temporary, v0.2.0)
+    "GetItemSpecInfo",
 }
 
 -- The offline test harness installs its own WoW stubs into _G on purpose.
