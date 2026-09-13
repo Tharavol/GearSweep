@@ -20,6 +20,7 @@ globals = {
     "SLASH_GEARSWEEP2",
     "SLASH_GSPROBE1", -- Probe.lua, temporary (v0.2.0)
     "SlashCmdList",
+    "GearSweepScanTooltip", -- Probe.lua, temporary (v0.2.0)
 }
 
 read_globals = {

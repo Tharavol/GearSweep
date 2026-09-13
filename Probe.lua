@@ -133,5 +133,33 @@ SlashCmdList["GSPROBE"] = function(msg)
     return
   end
 
-  print("GSProbe commands: /gsprobe bags | /gsprobe api | /gsprobe item | /gsprobe banktabs | /gsprobe tooltip")
+  if msg == "hidden" then
+    local _, link = GameTooltip:GetItem()
+    if not link then
+      print("GSProbe: no item under the tooltip - hover an item, then run this without moving the mouse")
+      return
+    end
+
+    -- A dedicated, never-shown tooltip: the real test for whether Scanner.lua
+    -- can bulk-classify hundreds of bag/bank items in the background, since
+    -- it can never rely on the live GameTooltip (that would require actually
+    -- hovering every item, and flashes visibly if shown on screen).
+    if not GearSweepScanTooltip then
+      CreateFrame("GameTooltip", "GearSweepScanTooltip", nil, "GameTooltipTemplate")
+    end
+    GearSweepScanTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+    GearSweepScanTooltip:SetHyperlink(link)
+
+    print(("GSProbe hidden tooltip lines (%d):"):format(GearSweepScanTooltip:NumLines()))
+    for i = 1, GearSweepScanTooltip:NumLines() do
+      local fs = _G["GearSweepScanTooltipTextLeft" .. i]
+      if fs and fs:GetText() then
+        print(("  [%d] %s"):format(i, fs:GetText()))
+      end
+    end
+    GearSweepScanTooltip:Hide()
+    return
+  end
+
+  print("GSProbe commands: bags | api | item | banktabs | tooltip | hidden")
 end
