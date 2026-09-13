@@ -1,0 +1,16 @@
+## Interface: 120100
+## Title: GearSweep
+## Notes: Sweeps your bank and Warband Bank for disenchant fodder and class/spec upgrades.
+## Author: Tharavol, Claude
+## Version: @project-version@
+## IconTexture: Interface\Icons\ability_racial_skeletonpinkie
+## X-License: MIT
+## SavedVariables: GearSweepDB
+
+## X-ReleaseNotes: Early development scaffolding - no player-facing features yet. See https://github.com/Tharavol/GearSweep for the current plan.
+
+Config.lua
+Core.lua
+Scanner.lua
+Classify.lua
+UI.lua
