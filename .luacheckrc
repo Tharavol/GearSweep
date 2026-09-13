@@ -33,6 +33,10 @@ read_globals = {
     -- Addon metadata
     "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",
 
+    -- Item/unit/spec queries
+    "UnitClass", "GetSpecialization", "GetSpecializationInfo",
+    "CursorHasItem", "strtrim", "strsplit",
+
     -- Probe.lua only (temporary, v0.2.0)
     "GetItemSpecInfo",
 }

@@ -1,4 +1,4 @@
-local ADDON_NAME = ...
+local ADDON_NAME, ns = ...
 
 --------------------------------------------------------------------------
 -- Temporary diagnostic module for v0.2.0 live-API verification
@@ -161,5 +161,67 @@ SlashCmdList["GSPROBE"] = function(msg)
     return
   end
 
-  print("GSProbe commands: bags | api | item | banktabs | tooltip | hidden")
+  if msg == "scan" then
+    local items = ns.Scanner:ScanAll()
+    print(("GSProbe scan: %d equipment items found"):format(#items))
+    for i = 1, math.min(10, #items) do
+      local item = items[i]
+      print(("  [%s] bag=%d slot=%d ilvl=%s q=%s bound=%s %s"):format(
+        item.source, item.bagID, item.slot, tostring(item.itemLevel),
+        tostring(item.quality), tostring(item.isBound), item.name or "?"))
+    end
+    return
+  end
+
+  if msg == "classify" then
+    local _, link = GameTooltip:GetItem()
+    if not link then
+      print("GSProbe: no item under the tooltip - hover an item, then run this without moving the mouse")
+      return
+    end
+
+    local track = ns.Classify:GetUpgradeTrackInfo(link)
+    print("GSProbe track:", track
+      and ("%s %d/%d"):format(tostring(track.name), track.currentLevel or -1, track.maxLevel or -1)
+      or "none (previous season/expansion)")
+    print("GSProbe current season:", ns.Classify:IsCurrentSeason(link))
+    print("GSProbe adventurer tier:", ns.Classify:IsAdventurerTier(link))
+    print("GSProbe usable:", ns.Classify:IsUsable(link))
+
+    local specs = ns.Classify:GetBestInSlotSpecs(link)
+    print("GSProbe BiS specs:", #specs > 0 and table.concat(specs, " | ") or "(none)")
+    print("GSProbe spec appropriate:", ns.Classify:IsSpecAppropriate(link))
+    return
+  end
+
+  if msg:match("^roundtrip") then
+    local _, bagStr, slotStr = strsplit(" ", msg)
+    local bagID, slot = tonumber(bagStr), tonumber(slotStr)
+    if not (bagID and slot) then
+      print("GSProbe: usage /gsprobe roundtrip <bagID> <slot> - picks the item up and places it back")
+      return
+    end
+
+    local before = C_Container.GetContainerItemInfo(bagID, slot)
+    if not before then
+      print("GSProbe: that slot is empty")
+      return
+    end
+    if CursorHasItem() then
+      print("GSProbe: cursor already holds something, aborting")
+      return
+    end
+
+    C_Container.PickupContainerItem(bagID, slot)
+    local heldAfterPickup = CursorHasItem()
+    C_Container.PickupContainerItem(bagID, slot)
+    local after = C_Container.GetContainerItemInfo(bagID, slot)
+
+    print(("GSProbe roundtrip: before=%s heldAfterPickup=%s after=%s stillHolding=%s"):format(
+      tostring(before.hyperlink), tostring(heldAfterPickup),
+      tostring(after and after.hyperlink), tostring(CursorHasItem())))
+    return
+  end
+
+  print("GSProbe commands: bags | api | item | banktabs | tooltip | hidden | scan | classify | roundtrip <bag> <slot>")
 end
