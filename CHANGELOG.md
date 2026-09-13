@@ -26,3 +26,14 @@ All notable changes to GearSweep are documented in this file.
 - A default-settings merge/reset that assigned a nested settings table by
   reference instead of copying it, which would have let the first filter
   change permanently corrupt what "reset" restores.
+- A crash opening the sweep window: anonymous checkboxes have no frame
+  name to look up their label text through.
+- A crash rendering results: `C_Item.GetItemQualityColor` returns plain
+  r/g/b numbers on this client, not a color table.
+- The Slot filter's last two rows overlapping the Season/Tier section -
+  the layout now computes each section's height instead of guessing the
+  gap between sections.
+- `Scanner.lua` read `hyperlink` from `GetItemInfo`'s return value instead
+  of the container slot's own link, which can silently point at a
+  differently-itemized cached copy of the item (missing this instance's
+  actual upgrade-track bonus IDs).
