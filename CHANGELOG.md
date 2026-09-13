@@ -23,10 +23,12 @@ All notable changes to GearSweep are documented in this file.
   every checked item into your bags.
 - Upgrade.lua: classifies equipment as usable by the current character
   (class/armor/weapon proficiency, reusing the same tooltip "usable" signal
-  as Classify.lua) and spec-appropriate, then auto-selects the single
-  highest item-level candidate per slot - rings and trinkets (dual-slot):
-  top two distinct items; two-hand weapons and one-hand+offhand pairs are
-  scored as a set so both never get pre-checked together.
+  as Classify.lua), spec-appropriate, and actually higher item level than
+  what's currently equipped in that slot (the lower of the two equipped
+  items for dual-slot rings/trinkets), then auto-selects the single highest
+  item-level candidate per slot - rings and trinkets: top two distinct
+  items; two-hand weapons and one-hand+offhand pairs are scored as a set so
+  both never get pre-checked together.
 - A Mode toggle (Disenchant / Upgrade) on the sweep window: Upgrade mode
   drives the same results list and "Pull Selected" action from
   upgrade-candidate classification instead, pre-checking only the
@@ -48,3 +50,7 @@ All notable changes to GearSweep are documented in this file.
   of the container slot's own link, which can silently point at a
   differently-itemized cached copy of the item (missing this instance's
   actual upgrade-track bonus IDs).
+- Upgrade mode listed items with no regard for what's actually equipped
+  (e.g. item level ~100-141 quest rewards, against item level 238 equipped
+  gear) - "usable" and "spec-appropriate" alone don't mean "better than
+  what you're wearing."

@@ -28,10 +28,83 @@ local OFF_HAND = {
 -- both be genuine upgrades at once.
 local DUAL_SLOT = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
 
+-- Real inventory slot names (Blizzard's GetInventorySlotInfo) an equip
+-- location's currently-equipped item level gets read from, for the "is
+-- this actually higher than what I'm wearing" comparison below. Finger and
+-- Trinket map to both of their physical slots. Off-hand-shaped equip locs
+-- (shield/holdable/relic) all read the same SecondaryHandSlot: whichever
+-- of them is equipped occupies that slot exclusively.
+local EQUIP_LOC_TO_INVENTORY_SLOTS = {
+  INVTYPE_HEAD = { "HeadSlot" },
+  INVTYPE_NECK = { "NeckSlot" },
+  INVTYPE_SHOULDER = { "ShoulderSlot" },
+  INVTYPE_CLOAK = { "BackSlot" },
+  INVTYPE_CHEST = { "ChestSlot" },
+  INVTYPE_ROBE = { "ChestSlot" },
+  INVTYPE_WAIST = { "WaistSlot" },
+  INVTYPE_LEGS = { "LegsSlot" },
+  INVTYPE_FEET = { "FeetSlot" },
+  INVTYPE_WRIST = { "WristSlot" },
+  INVTYPE_HAND = { "HandsSlot" },
+  INVTYPE_FINGER = { "Finger0Slot", "Finger1Slot" },
+  INVTYPE_TRINKET = { "Trinket0Slot", "Trinket1Slot" },
+  INVTYPE_WEAPON = { "MainHandSlot" },
+  INVTYPE_WEAPONMAINHAND = { "MainHandSlot" },
+  INVTYPE_2HWEAPON = { "MainHandSlot" },
+  INVTYPE_RANGED = { "MainHandSlot" },
+  INVTYPE_RANGEDRIGHT = { "MainHandSlot" },
+  INVTYPE_THROWN = { "MainHandSlot" },
+  INVTYPE_WEAPONOFFHAND = { "SecondaryHandSlot" },
+  INVTYPE_SHIELD = { "SecondaryHandSlot" },
+  INVTYPE_HOLDABLE = { "SecondaryHandSlot" },
+  INVTYPE_RELIC = { "SecondaryHandSlot" },
+}
+
+local function GetEquippedItemLevel(slotName)
+  local slotID = GetInventorySlotInfo(slotName)
+  if not slotID then
+    return 0
+  end
+  local link = GetInventoryItemLink("player", slotID)
+  if not link then
+    return 0
+  end
+  local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)
+  if not level then
+    level = select(4, C_Item.GetItemInfo(link))
+  end
+  return level or 0
+end
+
+-- True when the item's own level beats the equipped item it would actually
+-- replace - the lower of the two equipped items for dual-slot types
+-- (finger/trinket), the one equipped item otherwise. An empty slot reads
+-- as item level 0, so anything real counts as an upgrade there. This is
+-- the actual "is it an upgrade" check (#16) - IsUsable/IsSpecAppropriate
+-- alone only say the item is wearable, not that it's better than current
+-- gear (confirmed live: an ilvl ~100-141 quest reward otherwise passed
+-- those checks and was wrongly listed against ilvl 238 equipped gear).
+function Upgrade:IsUpgradeOverEquipped(item)
+  local slots = EQUIP_LOC_TO_INVENTORY_SLOTS[item.equipLoc]
+  if not slots then
+    return true
+  end
+
+  local baseline
+  for _, slotName in ipairs(slots) do
+    local level = GetEquippedItemLevel(slotName)
+    if not baseline or level < baseline then
+      baseline = level
+    end
+  end
+
+  return (item.itemLevel or 0) > (baseline or 0)
+end
+
 -- Whether the character can actually use the item (class/armor/weapon
--- proficiency, level, etc.) and whether it's relevant to the current spec,
+-- proficiency, level, etc.), whether it's relevant to the current spec -
 -- reusing Blizzard's own tooltip signals (#8/#15) rather than a hand-rolled
--- proficiency table.
+-- proficiency table - and whether it's actually better than what's equipped.
 function Upgrade:IsCandidate(item)
   if not RELEVANT_QUALITIES[item.quality] then
     return false
@@ -40,6 +113,9 @@ function Upgrade:IsCandidate(item)
     return false
   end
   if not ns.Classify:IsSpecAppropriate(item.hyperlink) then
+    return false
+  end
+  if not self:IsUpgradeOverEquipped(item) then
     return false
   end
   return true

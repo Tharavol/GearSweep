@@ -35,6 +35,18 @@ function stubs.install(env)
 
   env.C_Bank = nil
 
+  -- Real Blizzard inventory slot IDs (GetInventorySlotInfo), stable since
+  -- Classic. Every slot starts empty (GetInventoryItemLink returns nil);
+  -- tests override it per-case to simulate equipped gear.
+  local SLOT_IDS = {
+    HeadSlot = 1, NeckSlot = 2, ShoulderSlot = 3, BackSlot = 15, ChestSlot = 5,
+    WaistSlot = 6, LegsSlot = 7, FeetSlot = 8, WristSlot = 9, HandsSlot = 10,
+    Finger0Slot = 11, Finger1Slot = 12, Trinket0Slot = 13, Trinket1Slot = 14,
+    MainHandSlot = 16, SecondaryHandSlot = 17,
+  }
+  env.GetInventorySlotInfo = function(name) return SLOT_IDS[name] end
+  env.GetInventoryItemLink = function() return nil end
+
   env.SlashCmdList = {}
 
   return env

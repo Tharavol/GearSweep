@@ -20,10 +20,12 @@ Under active development. See the [milestones](../../milestones) and
 - **Upgrade mode**: switch the sweep window to Upgrade to filter your bags
   and bank for equipment your character can actually use - matching
   Blizzard's own class/armor/weapon proficiency and "Best in Slot"
-  spec-relevance signals - and pre-checks the single highest item level
-  candidate per slot (rings and trinkets: top two, since both are dual-slot;
-  two-hand weapons and one-hand+offhand pairs never both get pre-checked).
-  Uncheck a pre-selected pick or check a runner-up before pulling.
+  spec-relevance signals - that's also a higher item level than what's
+  currently equipped in that slot, then pre-checks the single highest item
+  level candidate per slot (rings and trinkets: top two, since both are
+  dual-slot; two-hand weapons and one-hand+offhand pairs never both get
+  pre-checked). Uncheck a pre-selected pick or check a runner-up before
+  pulling.
 - Auto-open on visiting the Warband Bank: not yet implemented (see the
   [v0.5.0 milestone](../../milestone/5)).
 

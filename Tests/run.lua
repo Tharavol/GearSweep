@@ -238,6 +238,65 @@ do
 end
 
 --------------------------------------------------------------------------
+-- Upgrade vs. currently-equipped gear (v0.4.0, #16 correctness fix)
+--------------------------------------------------------------------------
+
+ns.Classify.IsUsable = function() return true end
+ns.Classify.IsSpecAppropriate = function() return true end
+
+do
+  -- Empty slot (GetInventoryItemLink returns nil by default): anything
+  -- real counts as an upgrade.
+  local candidate = item("INVTYPE_HEAD", 100)
+  candidate.hyperlink = "item:1"
+  candidate.quality = 4
+  check(ns.Upgrade:IsCandidate(candidate), "any real item is an upgrade over an empty slot")
+end
+
+do
+  GetInventoryItemLink = function() return "item:equipped" end
+  C_Item.GetDetailedItemLevelInfo = function() return 200 end
+
+  local higher = item("INVTYPE_HEAD", 250)
+  higher.hyperlink = "item:1"
+  higher.quality = 4
+  check(ns.Upgrade:IsCandidate(higher), "an item above the equipped level is an upgrade")
+
+  local lower = item("INVTYPE_HEAD", 150)
+  lower.hyperlink = "item:2"
+  lower.quality = 4
+  check(not ns.Upgrade:IsCandidate(lower),
+    "an item below the equipped level is not an upgrade, even if otherwise usable")
+
+  GetInventoryItemLink = function() return nil end
+  C_Item.GetDetailedItemLevelInfo = function() return nil end
+end
+
+do
+  -- Dual-slot: baseline is the WORSE of the two equipped rings, so an item
+  -- that would only beat one of them still counts as an upgrade.
+  GetInventoryItemLink = function(_, slotID)
+    if slotID == GetInventorySlotInfo("Finger0Slot") then return "item:strong-ring" end
+    if slotID == GetInventorySlotInfo("Finger1Slot") then return "item:weak-ring" end
+    return nil
+  end
+  C_Item.GetDetailedItemLevelInfo = function(link)
+    if link == "item:strong-ring" then return 300 end
+    if link == "item:weak-ring" then return 100 end
+    return nil
+  end
+
+  local candidate = item("INVTYPE_FINGER", 200)
+  candidate.hyperlink = "item:new-ring"
+  candidate.quality = 3
+  check(ns.Upgrade:IsCandidate(candidate),
+    "a ring beating only the weaker of two equipped rings still counts as an upgrade")
+
+  GetInventoryItemLink = function() return nil end
+  C_Item.GetDetailedItemLevelInfo = function() return nil end
+end
+
+--------------------------------------------------------------------------
 
 print(("%d passed, %d failed"):format(passed, failed))
 for _, failure in ipairs(failures) do
