@@ -232,51 +232,55 @@ local function PullSelected()
   UI:Refresh()
 end
 
-local function CreateQualityCheckboxes(parent, anchor)
+-- Fixed row height every section below uses, so a section's total height
+-- is always (rows * ROW_STEP), computable up front instead of guessed.
+local ROW_STEP = 24
+
+-- All checkboxes are positioned as explicit (x, y) offsets from `frame`
+-- directly, never chained off a previous element's BOTTOMLEFT - that
+-- chaining was what produced guessed, wrong gaps between sections.
+
+local function CreateQualityCheckboxes(parent, x, yTop)
   local checkboxes = {}
-  local prev = anchor
-  for _, def in ipairs(QUALITY_FILTERS) do
+  for i, def in ipairs(QUALITY_FILTERS) do
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
-    cb:SetPoint("TOPLEFT", prev, prev == anchor and "TOPLEFT" or "BOTTOMLEFT", prev == anchor and 100 or 0, -4)
+    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, yTop - (i - 1) * ROW_STEP)
     cb.Text:SetText(def.label)
     cb:SetScript("OnClick", function(self)
       ns.db.disenchant.excludedQualities[def.quality] = (not self:GetChecked()) or nil
     end)
     checkboxes[def.quality] = cb
-    prev = cb
   end
-  return checkboxes
+  return checkboxes, yTop - #QUALITY_FILTERS * ROW_STEP
 end
 
-local function CreateSlotCheckboxes(parent, anchor)
+-- Two columns of up to 7; returns the checkboxes table and the bottom Y
+-- of the taller column, so the caller can lay out whatever comes next
+-- without guessing how many rows this section took.
+local function CreateSlotCheckboxes(parent, x, yTop)
   local checkboxes = {}
-  local prev, columnAnchor = anchor, anchor
+  local perColumn = 7
+  local columnWidth = 110
   for i, group in ipairs(SLOT_GROUPS) do
+    local col = math.floor((i - 1) / perColumn)
+    local row = (i - 1) % perColumn
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
-    if i == 1 then
-      cb:SetPoint("TOPLEFT", anchor, "TOPLEFT", 100, -4)
-      columnAnchor = cb
-    elseif (i - 1) % 7 == 0 then
-      cb:SetPoint("TOPLEFT", columnAnchor, "TOPRIGHT", 110, 0)
-      columnAnchor = cb
-    else
-      cb:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -4)
-    end
+    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x + col * columnWidth, yTop - row * ROW_STEP)
     cb.Text:SetText(group.label)
     cb:SetScript("OnClick", function(self)
       ns.db.disenchant.excludedSlotGroups[group.id] = (not self:GetChecked()) or nil
     end)
     checkboxes[group.id] = cb
-    prev = cb
   end
-  return checkboxes
+  local rowCount = math.min(perColumn, #SLOT_GROUPS)
+  return checkboxes, yTop - rowCount * ROW_STEP
 end
 
 local function CreatePanel()
   frame = CreateFrame("Frame", "GearSweepFrame", UIParent, "BasicFrameTemplateWithInset")
-  frame:SetSize(620, 520)
+  frame:SetSize(620, 640)
   frame:SetPoint("CENTER")
   frame:SetMovable(true)
   frame:EnableMouse(true)
@@ -289,45 +293,53 @@ local function CreatePanel()
   frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
   frame.title:SetText(ADDON_NAME .. " - Disenchant")
 
+  local PADDING = 16
+  local LABEL_COLUMN = 100
+  local y = -32
+
   local qualityLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  qualityLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -32)
+  qualityLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   qualityLabel:SetText("Quality")
-  qualityCheckboxes = CreateQualityCheckboxes(frame, qualityLabel)
+  qualityCheckboxes, y = CreateQualityCheckboxes(frame, PADDING + LABEL_COLUMN, y)
+  y = y - 10
 
   local slotLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  slotLabel:SetPoint("TOPLEFT", qualityLabel, "BOTTOMLEFT", 0, -60)
+  slotLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+  slotCheckboxes, y = CreateSlotCheckboxes(frame, PADDING + LABEL_COLUMN, y)
   slotLabel:SetText("Slot")
-  slotCheckboxes = CreateSlotCheckboxes(frame, slotLabel)
+  y = y - 10
 
   local seasonLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  seasonLabel:SetPoint("TOPLEFT", slotLabel, "BOTTOMLEFT", 0, -128)
+  seasonLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   seasonLabel:SetText("Season / Tier")
 
   adventurerCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   adventurerCheckbox:SetSize(20, 20)
-  adventurerCheckbox:SetPoint("TOPLEFT", seasonLabel, "TOPLEFT", 100, 4)
+  adventurerCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
   adventurerCheckbox.Text:SetText("Adventurer tier (current season)")
   adventurerCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includeAdventurerTier = self:GetChecked() and true or false
   end)
+  y = y - ROW_STEP
 
   previousSeasonCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
   previousSeasonCheckbox:SetSize(20, 20)
-  previousSeasonCheckbox:SetPoint("TOPLEFT", adventurerCheckbox, "BOTTOMLEFT", 0, -4)
+  previousSeasonCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
   previousSeasonCheckbox.Text:SetText("Previous season / expansion")
   previousSeasonCheckbox:SetScript("OnClick", function(self)
     ns.db.disenchant.includePreviousSeason = self:GetChecked() and true or false
   end)
+  y = y - ROW_STEP - 10
 
   local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  levelLabel:SetPoint("TOPLEFT", seasonLabel, "TOPLEFT", 0, -50)
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   levelLabel:SetText("Item Level")
 
   minLevelBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
   minLevelBox:SetSize(50, 20)
   minLevelBox:SetAutoFocus(false)
   minLevelBox:SetNumeric(true)
-  minLevelBox:SetPoint("LEFT", levelLabel, "RIGHT", 110, 0)
+  minLevelBox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y + 2)
   minLevelBox:SetScript("OnEnterPressed", function(self)
     ns.db.disenchant.minLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS.disenchant.minLevel
     self:ClearFocus()
@@ -346,11 +358,12 @@ local function CreatePanel()
     ns.db.disenchant.maxLevel = tonumber(self:GetText()) or ns.DEFAULT_SETTINGS.disenchant.maxLevel
     self:ClearFocus()
   end)
+  y = y - ROW_STEP - 10
 
   local refreshButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   refreshButton:SetSize(80, 22)
   refreshButton:SetText("Refresh")
-  refreshButton:SetPoint("TOPLEFT", levelLabel, "TOPLEFT", 0, -30)
+  refreshButton:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   refreshButton:SetScript("OnClick", function() UI:Refresh() end)
 
   local selectAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")

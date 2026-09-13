@@ -104,13 +104,17 @@ function Scanner:ScanAll()
     for slot = 1, numSlots do
       local info = C_Container.GetContainerItemInfo(bagID, slot)
       if info and info.hyperlink then
-        local name, link, quality, itemLevel, _, _, _, _, equipLoc = C_Item.GetItemInfo(info.hyperlink)
+        local name, _, quality, itemLevel, _, _, _, _, equipLoc = C_Item.GetItemInfo(info.hyperlink)
         if equipLoc and EQUIPPABLE_SLOTS[equipLoc] then
           local detailedLevel = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(info.hyperlink)
           table.insert(items, {
             bagID = bagID,
             slot = slot,
-            hyperlink = link or info.hyperlink,
+            -- info.hyperlink (not GetItemInfo's returned link) so
+            -- Classify.lua reads this exact instance's bonus IDs
+            -- (upgrade track/level) rather than whatever generic link
+            -- GetItemInfo cached the first time this item was seen.
+            hyperlink = info.hyperlink,
             name = name,
             quality = quality,
             itemLevel = detailedLevel or itemLevel,
