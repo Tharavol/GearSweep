@@ -8,11 +8,37 @@ ns.Scanner = Scanner
 -- deliberately excluded.
 local CHARACTER_BAG_IDS = { 0, 1, 2, 3, 4 }
 
--- Cosmetic-only equip slots that are never disenchant/upgrade candidates
--- regardless of quality (shirts, tabards), excluded per spec.
-local EXCLUDED_EQUIP_LOCS = {
-  INVTYPE_BODY = true,
-  INVTYPE_TABARD = true,
+-- Real wearable-gear equip slots. An allowlist rather than a blacklist:
+-- confirmed live (#8) that C_Item.GetItemInfo's 9th return value is a real,
+-- non-empty sentinel string for plenty of non-gear items too (e.g. a
+-- potion returns "INVTYPE_NON_EQUIP_IGNORE"), so excluding just a couple of
+-- known-bad values let everything else - potions, quest tokens, the
+-- Hearthstone - through. Deliberately excludes INVTYPE_BODY (shirt) and
+-- INVTYPE_TABARD per spec, and INVTYPE_BAG (bags themselves aren't gear).
+local EQUIPPABLE_SLOTS = {
+  INVTYPE_HEAD = true,
+  INVTYPE_NECK = true,
+  INVTYPE_SHOULDER = true,
+  INVTYPE_CLOAK = true,
+  INVTYPE_CHEST = true,
+  INVTYPE_ROBE = true,
+  INVTYPE_WAIST = true,
+  INVTYPE_LEGS = true,
+  INVTYPE_FEET = true,
+  INVTYPE_WRIST = true,
+  INVTYPE_HAND = true,
+  INVTYPE_FINGER = true,
+  INVTYPE_TRINKET = true,
+  INVTYPE_WEAPON = true,
+  INVTYPE_SHIELD = true,
+  INVTYPE_2HWEAPON = true,
+  INVTYPE_WEAPONMAINHAND = true,
+  INVTYPE_WEAPONOFFHAND = true,
+  INVTYPE_HOLDABLE = true,
+  INVTYPE_RANGED = true,
+  INVTYPE_RANGEDRIGHT = true,
+  INVTYPE_THROWN = true,
+  INVTYPE_RELIC = true,
 }
 
 -- Enumerates every purchased bank tab across every currently-viewable bank
@@ -79,7 +105,7 @@ function Scanner:ScanAll()
       local info = C_Container.GetContainerItemInfo(bagID, slot)
       if info and info.hyperlink then
         local name, link, quality, itemLevel, _, _, _, _, equipLoc = C_Item.GetItemInfo(info.hyperlink)
-        if equipLoc and equipLoc ~= "" and not EXCLUDED_EQUIP_LOCS[equipLoc] then
+        if equipLoc and EQUIPPABLE_SLOTS[equipLoc] then
           local detailedLevel = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(info.hyperlink)
           table.insert(items, {
             bagID = bagID,
