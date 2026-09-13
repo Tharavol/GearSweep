@@ -22,6 +22,24 @@ Under active development. See the [milestones](../../milestones) and
 - One button to pull everything selected into your bags. GearSweep never
   disenchants or equips anything on its own.
 
+## Slash Commands
+
+| Command | Description |
+|---|---|
+| `/gearsweep` or `/gs` | Opens the GearSweep options panel (also: `options`, `config`, `gui`). |
+| `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
+| `/gs status` | Shows current settings. |
+| `/gs version` | Shows the addon version. |
+| `/gs reset` | Restores settings to defaults. |
+| `/gs help` | Lists all commands. |
+
+## Configuration
+
+Open the options panel with `/gs` (or via the standard WoW AddOns options
+menu). Only diagnostic logging is configurable so far; filter and mode
+options land as disenchant and upgrade mode are implemented (see
+[milestones](../../milestones)).
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
