@@ -381,6 +381,32 @@ do
 end
 
 do
+  -- Confirmed live: a lone main-hand candidate (e.g. a wand) with no
+  -- off-hand candidate found was wrongly averaged against an off-hand
+  -- slot that was empty either way, halving its effective value. The
+  -- off-hand isn't being lost by switching - it was already empty under
+  -- the equipped two-hander - so this should compare directly.
+  mockEquippedWeapons("item:staff", "INVTYPE_2HWEAPON", 256)
+
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_RANGEDRIGHT", 292) })
+  equals(#best, 1, "a lone main-hand candidate beats a weaker two-hander directly, not halved")
+  equals(best[1].equipLoc, "INVTYPE_RANGEDRIGHT", "the main-hand candidate is selected")
+
+  resetMockedEquipment()
+end
+
+do
+  -- Same shape, but the lone candidate is too weak even at full (unhalved)
+  -- value - the two-hander should still win.
+  mockEquippedWeapons("item:staff", "INVTYPE_2HWEAPON", 300)
+
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_RANGEDRIGHT", 250) })
+  equals(#best, 0, "a lone main-hand candidate weaker than the equipped two-hander is not suggested")
+
+  resetMockedEquipment()
+end
+
+do
   -- Vice versa: currently dual-wielding (average 300). A weaker two-hand
   -- candidate (280) should not be suggested.
   mockEquippedWeapons("item:mainhand", "INVTYPE_WEAPONMAINHAND", 300, 300)

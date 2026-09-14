@@ -137,3 +137,8 @@ All notable changes to GearSweep are documented in this file.
   candidate still can't be suggested alone while a two-hander is equipped
   and no one-hand candidate exists to pair it with - the slot is
   genuinely blocked in that case.
+- A lone main-hand candidate (e.g. a wand) with no off-hand candidate
+  found was averaged against an off-hand slot that was empty either way,
+  halving its effective value against the equipped two-hander (confirmed
+  live: a 292 wand lost to a 256 staff). Switching to it doesn't cost an
+  off-hand item that was never there, so this now compares directly.

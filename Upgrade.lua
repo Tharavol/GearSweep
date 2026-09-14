@@ -310,8 +310,22 @@ function Upgrade:SelectBest(candidates)
 
   local oneHandAverage
   if bestMainHand then
-    local offLevel = bestOffHand and bestOffHand.itemLevel or (not equippedTwoHand and equippedOffLevel or 0)
-    oneHandAverage = (bestMainHand.itemLevel + offLevel) / 2
+    if bestOffHand then
+      oneHandAverage = (bestMainHand.itemLevel + bestOffHand.itemLevel) / 2
+    elseif equippedTwoHand then
+      -- No off-hand candidate, and the off-hand is already empty right
+      -- now (blocked by the equipped two-hander) - switching to this
+      -- main-hand item alone doesn't cost anything there, so compare it
+      -- directly instead of diluting it against a slot that was never
+      -- going to be filled either way (confirmed live: a 292 wand was
+      -- wrongly weighed against a 256 staff as if losing an off-hand
+      -- item it never had).
+      oneHandAverage = bestMainHand.itemLevel
+    else
+      -- Already one-hand/dual-wield: the off-hand keeps whatever's
+      -- currently equipped there if no better candidate was found for it.
+      oneHandAverage = (bestMainHand.itemLevel + equippedOffLevel) / 2
+    end
   end
 
   local bestAverage, bestOption = currentAverage, "current"
