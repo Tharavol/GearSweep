@@ -82,10 +82,21 @@ function Classify:IsAdventurerTier(link)
   return track ~= nil and track.name == "Adventurer"
 end
 
--- Scans structured requirement lines (type 43: level/class/skill
--- requirements) for Blizzard's own "usable" flag - the same signal that
--- colors a tooltip requirement red. True unless any requirement fails.
+-- C_Item.IsUsableItem is the real class/armor/weapon proficiency signal
+-- (#35): confirmed live that a shield's tooltip on a Mage carries no
+-- requirement line at all (no "Classes:" text, structured or plain) - the
+-- only type-43 line was "Requires Level 90", usable=true - yet
+-- IsUsableItem correctly reported usable=false. Tooltip requirement lines
+-- (level/reputation/quest-gated items, still real and still worth
+-- catching) are checked as a second, independent gate.
 function Classify:IsUsable(link)
+  if C_Item and C_Item.IsUsableItem then
+    local usable = C_Item.IsUsableItem(link)
+    if usable == false then
+      return false
+    end
+  end
+
   if not C_TooltipInfo then
     return true
   end

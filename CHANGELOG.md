@@ -86,3 +86,9 @@ All notable changes to GearSweep are documented in this file.
   RelayoutFrame only advanced past a section's own header row when
   expanded (via the first checkbox row sharing it); collapsed sections
   never accounted for that row on their own.
+- Upgrade mode suggested items the character's class can't equip at all
+  (e.g. a shield on a Mage) (#35): confirmed live that the item's tooltip
+  carried no class/armor/weapon proficiency signal whatsoever - the
+  tooltip-based `IsUsable` check this relied on genuinely had no data to
+  work with. Now also gated on `C_Item.IsUsableItem`, the actual Blizzard
+  API for this, confirmed live to correctly report the mismatch.
