@@ -4,6 +4,8 @@ All notable changes to GearSweep are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-14
+
 ### Added
 - Project scaffolding: `.toc`, core init, options panel skeleton, and slash
   command dispatch (`/gearsweep`, alias `/gs`).
