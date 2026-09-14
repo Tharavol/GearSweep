@@ -285,12 +285,74 @@ ns.Classify.IsUsable = function() return true end
 ns.Classify.IsSpecAppropriate = function() return true end
 
 do
-  -- Empty slot (GetInventoryItemLink returns nil by default): anything
+  -- Empty slot (GetInventoryItemLink returns nil by default), and no
+  -- meaningful average equipped level to fall back on either: anything
   -- real counts as an upgrade.
   local candidate = item("INVTYPE_HEAD", 100)
   candidate.hyperlink = "item:1"
   candidate.quality = 4
   check(ns.Upgrade:IsCandidate(candidate), "any real item is an upgrade over an empty slot")
+end
+
+do
+  -- #36: an empty slot on a character who otherwise wears real gear
+  -- (e.g. a caster who never equips an off-hand item) falls back to the
+  -- character's average equipped item level, not literal 0 - so a
+  -- trivially low-level item doesn't "win" against nothing.
+  GetAverageItemLevel = function() return 250, 250, 250 end
+
+  local junk = item("INVTYPE_HOLDABLE", 15)
+  junk.hyperlink = "item:junk"
+  junk.quality = 2
+  check(not ns.Upgrade:IsCandidate(junk),
+    "a trivially low-level item on a permanently-empty slot is not an upgrade")
+
+  local real = item("INVTYPE_HOLDABLE", 280)
+  real.hyperlink = "item:real"
+  real.quality = 4
+  check(ns.Upgrade:IsCandidate(real),
+    "a genuinely strong item on a permanently-empty slot is still an upgrade")
+
+  GetAverageItemLevel = function() return 0, 0, 0 end
+end
+
+do
+  -- #36: a two-hand weapon in the main hand blocks ALL off-hand-slot
+  -- items (weapon, shield, holdable) regardless of item level - a hard
+  -- game rule, not an item-level question.
+  GetInventoryItemLink = function(_, slotID)
+    if slotID == GetInventorySlotInfo("MainHandSlot") then return "item:staff" end
+    return nil
+  end
+  C_Item.GetItemInfo = function(link)
+    if link == "item:staff" then
+      return "Staff", link, 4, 292, 90, "Weapon", "Staves", 1, "INVTYPE_2HWEAPON"
+    end
+    return nil
+  end
+
+  local shield = item("INVTYPE_SHIELD", 246)
+  shield.hyperlink = "item:shield"
+  shield.quality = 4
+  check(not ns.Upgrade:IsCandidate(shield),
+    "a shield is never a candidate while a two-hand weapon is equipped")
+
+  local offhandWeapon = item("INVTYPE_WEAPONOFFHAND", 280)
+  offhandWeapon.hyperlink = "item:offhand-weapon"
+  offhandWeapon.quality = 4
+  check(not ns.Upgrade:IsCandidate(offhandWeapon),
+    "an off-hand weapon is never a candidate while a two-hand weapon is equipped")
+
+  -- A one-hand main-hand candidate is still fine - it would simply
+  -- replace the two-hander, not stack alongside it.
+  local mainHandCandidate = item("INVTYPE_WEAPONMAINHAND", 300)
+  mainHandCandidate.hyperlink = "item:1h"
+  mainHandCandidate.quality = 4
+  check(ns.Upgrade:IsCandidate(mainHandCandidate),
+    "a one-hand main-hand item is still a valid candidate over an equipped two-hander")
+
+  GetInventoryItemLink = function() return nil end
+  C_Item.GetItemInfo = function() return nil end
 end
 
 do

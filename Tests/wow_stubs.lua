@@ -65,6 +65,10 @@ function stubs.install(env)
   env.GetInventorySlotInfo = function(name) return SLOT_IDS[name] end
   env.GetInventoryItemLink = function() return nil end
 
+  -- Tests override this to simulate a character with real average gear,
+  -- so an empty-slot comparison isn't trivially beaten by junk (#36).
+  env.GetAverageItemLevel = function() return 0, 0, 0 end
+
   env.SlashCmdList = {}
 
   return env

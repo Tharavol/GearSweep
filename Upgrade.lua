@@ -28,6 +28,15 @@ local OFF_HAND = {
 -- both be genuine upgrades at once.
 local DUAL_SLOT = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
 
+-- Every equip loc that physically occupies the off-hand slot. None of
+-- these can ever be equipped while a two-hand weapon is in the main hand
+-- (#36) - a hard game rule, not an item-level question: an ilvl 15
+-- off-hand trinket doesn't become invalid because it's weak, it's
+-- invalid because there's nowhere for it to go right now.
+local OCCUPIES_SECONDARY_HAND = {
+  INVTYPE_WEAPONOFFHAND = true, INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true, INVTYPE_RELIC = true,
+}
+
 -- Real inventory slot names (Blizzard's GetInventorySlotInfo) an equip
 -- location's currently-equipped item level gets read from, for the "is
 -- this actually higher than what I'm wearing" comparison below. Finger and
@@ -90,8 +99,12 @@ end
 
 -- The equipped item level an equip location's candidates are compared
 -- against: the lower of the two equipped items for dual-slot types
--- (finger/trinket), the one equipped item otherwise. An empty slot reads
--- as item level 0.
+-- (finger/trinket), the one equipped item otherwise. A slot that's
+-- genuinely empty (never equipped anything, e.g. a caster's off-hand)
+-- falls back to the character's overall average equipped item level
+-- rather than 0 (#36) - confirmed live that an ilvl 15 off-hand item
+-- otherwise "won" against nothing, when it's obviously not a real
+-- upgrade for a character wearing ilvl ~290 everywhere else.
 function Upgrade:GetBaselineItemLevel(equipLoc)
   local slots = EQUIP_LOC_TO_INVENTORY_SLOTS[equipLoc]
   if not slots then
@@ -105,7 +118,14 @@ function Upgrade:GetBaselineItemLevel(equipLoc)
       baseline = level
     end
   end
-  return baseline or 0
+  baseline = baseline or 0
+
+  if baseline == 0 and GetAverageItemLevel then
+    local _, avgEquipped = GetAverageItemLevel()
+    baseline = avgEquipped or 0
+  end
+
+  return baseline
 end
 
 -- True when the item's own level beats the equipped item it would actually
@@ -173,12 +193,24 @@ function Upgrade:FindEquippedLink(query)
   return nil
 end
 
+-- True when a two-hand weapon currently occupies the main hand, meaning
+-- the off-hand slot itself is unusable right now regardless of what's
+-- offered for it (#36).
+local function IsMainHandTwoHanded()
+  local slotID = GetInventorySlotInfo("MainHandSlot")
+  local link = slotID and GetInventoryItemLink("player", slotID)
+  if not link then
+    return false
+  end
+  return select(9, C_Item.GetItemInfo(link)) == "INVTYPE_2HWEAPON"
+end
+
 -- Whether the character can actually use the item: class/armor/weapon
 -- proficiency (#35 - a hand-maintained table, since no live signal covers
 -- this for Warband Bank items), the tooltip's own requirement-line
 -- "usable" flag (level/reputation/quest gates, #8/#15), whether it's
--- relevant to the current spec, and whether it's actually better than
--- what's equipped.
+-- relevant to the current spec, whether the off-hand slot is even usable
+-- right now (#36), and whether it's actually better than what's equipped.
 function Upgrade:IsCandidate(item)
   if not RELEVANT_QUALITIES[item.quality] then
     return false
@@ -190,6 +222,9 @@ function Upgrade:IsCandidate(item)
     return false
   end
   if not ns.Classify:IsSpecAppropriate(item.hyperlink) then
+    return false
+  end
+  if OCCUPIES_SECONDARY_HAND[item.equipLoc] and IsMainHandTwoHanded() then
     return false
   end
   if not self:IsUpgradeOverEquipped(item) then

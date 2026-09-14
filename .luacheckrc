@@ -34,7 +34,7 @@ read_globals = {
 
     -- Item/unit/spec queries
     "UnitClass", "UnitClassBase", "GetSpecialization", "GetSpecializationInfo", "CursorHasItem", "strtrim",
-    "ITEM_QUALITY_COLORS", "GetInventorySlotInfo", "GetInventoryItemLink",
+    "ITEM_QUALITY_COLORS", "GetInventorySlotInfo", "GetInventoryItemLink", "GetAverageItemLevel",
 }
 
 -- The offline test harness installs its own WoW stubs into _G on purpose.

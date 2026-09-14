@@ -100,3 +100,14 @@ All notable changes to GearSweep are documented in this file.
   added a small hand-maintained proficiency table (data cross-referenced
   against the Unfit-1.0 library - see ATTRIBUTION.md - rather than
   re-derived from memory) as the only remaining option.
+- Upgrade mode suggesting trivially low-ilvl items for slots that have
+  simply never been filled (#36, e.g. an ilvl 15 off-hand item for a
+  caster who's only ever used staves): a genuinely-empty slot now falls
+  back to the character's overall average equipped item level instead of
+  comparing against 0.
+- Upgrade mode suggesting off-hand items (weapons, shields, holdables) at
+  all while a two-hand weapon is equipped (#36): not an item-level
+  question - the off-hand slot is unusable while wielding a two-hander,
+  regardless of what's offered for it, so those items are excluded from
+  candidates entirely in that case rather than compared against a
+  fallback baseline.
