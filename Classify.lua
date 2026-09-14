@@ -59,21 +59,41 @@ local UNUSABLE_WEAPON_SUBCLASSES = {
   WARRIOR = { [W.Warglaive]=true, [W.Wand]=true },
 }
 
-local UNUSABLE_ARMOR_SUBCLASSES = {
-  DEATHKNIGHT = { [A.Shield]=true },
-  DEMONHUNTER = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  DRUID = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  EVOKER = { [A.Plate]=true, [A.Shield]=true },
-  HUNTER = { [A.Plate]=true, [A.Shield]=true },
-  MAGE = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  MONK = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  PALADIN = {},
-  PRIEST = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  ROGUE = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  SHAMAN = { [A.Plate]=true },
-  WARLOCK = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
-  WARRIOR = {},
+-- Each class's own real armor type - not "that type or anything lighter"
+-- (confirmed live, #40: a Death Knight, plate's own class, was recommended
+-- non-plate armor because the previous table only ever excluded the
+-- heavier types above a class's own, e.g. excluding Mail/Plate for a
+-- Leather class but never excluding Cloth for anyone above it - so every
+-- plate class had essentially no armor-type restriction at all beyond
+-- shields). An upgrade recommendation needs a real stat gain, not merely
+-- technically-equippable gear, so this is an exact match against a
+-- class's one real armor type, checked separately from shield usability.
+local CLASS_ARMOR_TYPE = {
+  DEATHKNIGHT = A.Plate,
+  DEMONHUNTER = A.Leather,
+  DRUID = A.Leather,
+  EVOKER = A.Mail,
+  HUNTER = A.Mail,
+  MAGE = A.Cloth,
+  MONK = A.Leather,
+  PALADIN = A.Plate,
+  PRIEST = A.Cloth,
+  ROGUE = A.Leather,
+  SHAMAN = A.Mail,
+  WARLOCK = A.Cloth,
+  WARRIOR = A.Plate,
 }
+
+-- Only Warrior, Paladin, and Shaman can equip a shield at all - independent
+-- of armor type, since Death Knight (also plate) cannot.
+local CAN_USE_SHIELD = {
+  PALADIN = true, SHAMAN = true, WARRIOR = true,
+}
+
+-- The four real wearable armor tiers CLASS_ARMOR_TYPE gates on; anything
+-- else (Cosmetic, or the old relic-ish off-hand subclasses) isn't a
+-- class-restricted armor type at all.
+local WEARABLE_ARMOR_TYPES = { [A.Cloth]=true, [A.Leather]=true, [A.Mail]=true, [A.Plate]=true }
 
 -- Classes that cannot dual-wield: an off-hand weapon (INVTYPE_WEAPONOFFHAND
 -- - a literal second weapon, not a shield/holdable/relic) is never usable
@@ -100,8 +120,14 @@ function Classify:IsClassProficient(item)
   end
 
   if item.classID == Enum.ItemClass.Armor then
-    local unusable = UNUSABLE_ARMOR_SUBCLASSES[class]
-    return not (unusable and unusable[item.subclassID])
+    if item.subclassID == A.Shield then
+      return CAN_USE_SHIELD[class] == true
+    end
+    local ownType = CLASS_ARMOR_TYPE[class]
+    if not ownType or not WEARABLE_ARMOR_TYPES[item.subclassID] then
+      return true
+    end
+    return item.subclassID == ownType
   end
 
   return true

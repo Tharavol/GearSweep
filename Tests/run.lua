@@ -634,6 +634,46 @@ do
     "a Warrior can equip a shield")
   check(not ns.Classify:IsClassProficient(classifiedItem(2, 19, "INVTYPE_WEAPON")),
     "a Warrior cannot equip a wand")
+  -- #40: a Plate class must be restricted to Plate armor specifically, not
+  -- merely "Plate or anything lighter" - a real upgrade recommendation
+  -- needs an actual stat gain.
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 1, "INVTYPE_CHEST")),
+    "a Warrior cannot equip cloth armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 2, "INVTYPE_CHEST")),
+    "a Warrior cannot equip leather armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 3, "INVTYPE_CHEST")),
+    "a Warrior cannot equip mail armor")
+end
+
+do
+  -- #40: confirmed live - a Death Knight (also a Plate class) was
+  -- recommended non-plate armor, because the previous table only ever
+  -- excluded armor types heavier than a class's own, and Plate has
+  -- nothing heavier to exclude.
+  UnitClassBase = function() return "DEATHKNIGHT" end
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 4, "INVTYPE_CHEST")),
+    "a Death Knight can equip plate armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 1, "INVTYPE_CHEST")),
+    "a Death Knight cannot equip cloth armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 2, "INVTYPE_CHEST")),
+    "a Death Knight cannot equip leather armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 3, "INVTYPE_CHEST")),
+    "a Death Knight cannot equip mail armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 6, "INVTYPE_SHIELD")),
+    "a Death Knight cannot equip a shield, unlike the other Plate classes")
+end
+
+do
+  -- Same latent gap as #40, for the Mail and Leather tiers.
+  UnitClassBase = function() return "HUNTER" end
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 3, "INVTYPE_CHEST")), "a Hunter can equip mail armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 1, "INVTYPE_CHEST")), "a Hunter cannot equip cloth armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 2, "INVTYPE_CHEST")),
+    "a Hunter cannot equip leather armor")
+
+  UnitClassBase = function() return "DRUID" end
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 2, "INVTYPE_CHEST")), "a Druid can equip leather armor")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 1, "INVTYPE_CHEST")), "a Druid cannot equip cloth armor")
 end
 
 do

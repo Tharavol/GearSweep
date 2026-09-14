@@ -180,3 +180,15 @@ All notable changes to GearSweep are documented in this file.
   review (no change needed): an empty bank/no matching items already
   renders as "0 matching items" rather than erroring, and an item with no
   spec-relevance annotation already defaults to spec-appropriate (#23).
+- Upgrade mode recommended non-plate armor to a Death Knight (#40,
+  confirmed live during the #24 manual QA pass): `IsClassProficient`'s
+  armor table only ever excluded types heavier than a class's own (e.g.
+  excluding Mail/Plate for a Leather class), so every Plate class -
+  Warrior and Paladin included, not just Death Knight - had effectively no
+  armor-type restriction at all beyond shields, and Hunter/Shaman/Evoker
+  (Mail) and Druid/Demon Hunter/Monk/Rogue (Leather) had the same gap one
+  tier down. Armor proficiency is now an exact match against each class's
+  one real armor type - a genuine upgrade needs an actual stat gain, not
+  merely technically-equippable gear - checked separately from shield
+  usability (Warrior/Paladin/Shaman only; Death Knight, also Plate,
+  cannot use a shield).
