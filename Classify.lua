@@ -125,6 +125,11 @@ function Classify:DumpTooltip(link)
     end
   end
 
+  if C_Item and C_Item.IsUsableItem then
+    local usable, noMana = C_Item.IsUsableItem(link)
+    print(("C_Item.IsUsableItem: usable=%s noMana=%s"):format(tostring(usable), tostring(noMana)))
+  end
+
   print(("IsUsable: %s"):format(tostring(self:IsUsable(link))))
 end
 
