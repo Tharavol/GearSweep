@@ -22,10 +22,12 @@ All notable changes to GearSweep are documented in this file.
   scrollable results list with per-item checkboxes; "Pull Selected" moves
   every checked item into your bags.
 - Upgrade.lua: classifies equipment as usable by the current character
-  (class/armor/weapon proficiency, reusing the same tooltip "usable" signal
-  as Classify.lua), spec-appropriate, and actually higher item level than
-  what's currently equipped in that slot (the lower of the two equipped
-  items for dual-slot rings/trinkets), then auto-selects the single highest
+  (class/armor/weapon proficiency via a hand-maintained table - see #35 -
+  plus the tooltip's own "usable" signal for level/reputation/quest gates),
+  spec-appropriate, and actually higher item level than what's currently
+  equipped in that slot (the lower of the two equipped items for dual-slot
+  rings/trinkets, or the character's average equipped item level for a
+  slot that's never been filled), then auto-selects the single highest
   item-level candidate per slot - rings and trinkets: top two distinct
   items; two-hand weapons and one-hand+offhand pairs are scored as a set so
   both never get pre-checked together.
