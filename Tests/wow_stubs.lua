@@ -35,6 +35,43 @@ function stubs.install(env)
 
   env.C_Bank = nil
 
+  -- Tests override this per case to simulate an item's upgrade-track/
+  -- requirement tooltip data (Classify.lua's season/tier/usable checks).
+  env.C_TooltipInfo = {
+    GetHyperlink = function() return nil end,
+  }
+
+  env.CursorHasItem = function() return false end
+  env.C_Container.PickupContainerItem = function() end
+
+  env.strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+
+  -- Minimal enough for Classify.lua's background scan tooltip (GetScanTooltip):
+  -- NumLines counts consecutive _G[name.."TextLeft"..i] entries a test has set,
+  -- so a test drives tooltip content by populating _G directly rather than
+  -- through a second, parallel line-storage mechanism.
+  env.UIParent = {}
+  env.CreateFrame = function(_frameType, name)
+    local frame = { name = name }
+    function frame:GetName() return name end
+    function frame:SetOwner() end
+    function frame:SetHyperlink() end
+    function frame:NumLines()
+      local n = 0
+      while env[name .. "TextLeft" .. (n + 1)] do
+        n = n + 1
+      end
+      return n
+    end
+    return frame
+  end
+
+  -- Tests override these per case to simulate the player's class/spec
+  -- (Classify.lua's spec-relevance check, Classify:IsSpecAppropriate).
+  env.UnitClass = function() return nil end
+  env.GetSpecialization = function() return nil end
+  env.GetSpecializationInfo = function() return nil end
+
   -- Real Blizzard item classification enums, for Classify.lua's class
   -- proficiency table (#35).
   env.Enum = env.Enum or {}

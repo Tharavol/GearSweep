@@ -41,6 +41,7 @@ local ns = {
   Print = function(fmt, ...)
     table.insert(printedMessages, select("#", ...) > 0 and fmt:format(...) or fmt)
   end,
+  Debug = function() end,
 }
 
 local function deepCopy(value)
@@ -199,11 +200,387 @@ do
 end
 
 --------------------------------------------------------------------------
--- Upgrade best-per-slot selection (v0.4.0, #16)
+-- Scanner.lua (#23)
+--------------------------------------------------------------------------
+
+stubs.loadModule(here .. "/../Scanner.lua", "GearSweep", ns)
+
+-- Builds C_Container stubs from { [bagID] = { [slot] = { hyperlink=, isBound= } } };
+-- any bag/slot not listed has 0 slots / an empty slot, matching a real bag.
+local function mockContainers(bagContents)
+  C_Container.GetContainerNumSlots = function(bagID)
+    local slots = bagContents[bagID]
+    if not slots then return 0 end
+    local max = 0
+    for slot in pairs(slots) do
+      if slot > max then max = slot end
+    end
+    return max
+  end
+  C_Container.GetContainerItemInfo = function(bagID, slot)
+    local slots = bagContents[bagID]
+    return slots and slots[slot]
+  end
+end
+
+-- Builds C_Item.GetItemInfo from { [hyperlink] = { name, quality, itemLevel,
+-- equipLoc, classID, subclassID } }, matching GetItemInfo's real return
+-- positions (1 name, 3 quality, 4 itemLevel, 9 equipLoc, 12 classID, 13 subclassID).
+local function mockItemInfo(infoByLink, detailedLevelByLink)
+  C_Item.GetItemInfo = function(link)
+    local info = infoByLink[link]
+    if not info then return nil end
+    return info[1], link, info[2], info[3], 90, "?", "?", 1, info[4], "icon", 0, info[5], info[6]
+  end
+  C_Item.GetDetailedItemLevelInfo = function(link)
+    return detailedLevelByLink and detailedLevelByLink[link]
+  end
+end
+
+local function resetScannerMocks()
+  C_Container.GetContainerNumSlots = function() return 0 end
+  C_Container.GetContainerItemInfo = function() return nil end
+  C_Item.GetItemInfo = function() return nil end
+  C_Item.GetDetailedItemLevelInfo = function() return nil end
+  C_Bank = nil
+  Enum.BankType = nil
+end
+
+do
+  -- No bank purchased/open (C_Bank absent entirely on some clients): only
+  -- the 5 character bag IDs are scanned, backpack plus the 4 equipped bags.
+  local locations = ns.Scanner:GetLocations()
+  equals(#locations, 5, "with no bank, only the character's bags are locations")
+  for i, bagID in ipairs({ 0, 1, 2, 3, 4 }) do
+    equals(locations[i].bagID, bagID, "bag location " .. i .. " has the expected bag ID")
+    equals(locations[i].source, "Bags", "bag locations are labeled 'Bags'")
+  end
+end
+
+do
+  -- Every purchased tab of every viewable bank type is a location, labeled
+  -- with its bank type's real name via Enum.BankType.
+  C_Bank = {
+    FetchViewableBankTypes = function() return { 1, 2 } end,
+    FetchPurchasedBankTabIDs = function(bankType)
+      if bankType == 1 then return { 6 } end
+      if bankType == 2 then return { 7, 8 } end
+      return {}
+    end,
+  }
+  Enum.BankType = { Character = 1, Account = 2 }
+
+  local locations = ns.Scanner:GetLocations()
+  equals(#locations, 8, "bag locations plus every purchased bank tab")
+  equals(locations[6].bagID, 6, "the character bank tab's bag ID is included")
+  equals(locations[6].source, "Character", "the character bank tab is labeled by its real bank type name")
+  equals(locations[7].bagID, 7, "the first Warband Bank tab's bag ID is included")
+  equals(locations[7].source, "Account", "Warband Bank tabs are labeled by their real bank type name")
+  equals(locations[8].bagID, 8, "a second purchased tab of the same bank type is included")
+
+  resetScannerMocks()
+end
+
+do
+  -- A bank type with no matching Enum.BankType entry still gets a location,
+  -- just without a friendly name.
+  C_Bank = {
+    FetchViewableBankTypes = function() return { 99 } end,
+    FetchPurchasedBankTabIDs = function() return { 6 } end,
+  }
+  Enum.BankType = { Character = 1 }
+
+  local locations = ns.Scanner:GetLocations()
+  equals(locations[6].source, "Bank type 99",
+    "an unrecognised bank type still gets a location, labeled generically")
+
+  resetScannerMocks()
+end
+
+do
+  -- ScanAll enumerates real gear, skips empty slots and non-gear items
+  -- (a potion's equipLoc, and the cosmetic-only shirt/tabard slots), and
+  -- prefers the detailed (upgraded) item level over GetItemInfo's own.
+  mockContainers({
+    [0] = {
+      [1] = { hyperlink = "item:sword", isBound = true },
+      [2] = { hyperlink = "item:potion", isBound = false },
+      -- Empty slot 3: GetContainerItemInfo returns nil.
+      [4] = { hyperlink = "item:shirt", isBound = false },
+    },
+  })
+  mockItemInfo({
+    ["item:sword"] = { "Sword", 4, 200, "INVTYPE_WEAPON", 2, 7 },
+    ["item:potion"] = { "Potion", 1, 1, "INVTYPE_NON_EQUIP_IGNORE", 0, 0 },
+    ["item:shirt"] = { "Shirt", 1, 1, "INVTYPE_BODY", 4, 0 },
+  }, {
+    ["item:sword"] = 210,
+  })
+
+  local items = ns.Scanner:ScanAll()
+  equals(#items, 1, "only the real gear item is scanned - the potion and shirt are excluded")
+  local sword = items[1]
+  equals(sword.hyperlink, "item:sword", "the scanned item keeps the container slot's own hyperlink")
+  equals(sword.name, "Sword", "the scanned item's name comes from GetItemInfo")
+  equals(sword.quality, 4, "the scanned item's quality comes from GetItemInfo")
+  equals(sword.itemLevel, 210, "the detailed item level wins over GetItemInfo's own item level")
+  equals(sword.equipLoc, "INVTYPE_WEAPON", "the scanned item's equip location comes from GetItemInfo")
+  equals(sword.classID, 2, "the scanned item's classID comes from GetItemInfo")
+  equals(sword.subclassID, 7, "the scanned item's subclassID comes from GetItemInfo")
+  equals(sword.isBound, true, "the scanned item's bound state comes from the container slot")
+  equals(sword.bagID, 0, "the scanned item's bag ID is recorded")
+  equals(sword.slot, 1, "the scanned item's slot is recorded")
+  equals(sword.source, "Bags", "the scanned item's source label comes from its location")
+
+  resetScannerMocks()
+end
+
+do
+  -- No detailed item level available (GetDetailedItemLevelInfo returns
+  -- nil): falls back to GetItemInfo's own item level.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:sword", isBound = false } } })
+  mockItemInfo({ ["item:sword"] = { "Sword", 4, 200, "INVTYPE_WEAPON", 2, 7 } })
+
+  local items = ns.Scanner:ScanAll()
+  equals(items[1].itemLevel, 200, "with no detailed level available, GetItemInfo's item level is used")
+
+  resetScannerMocks()
+end
+
+do
+  -- WithdrawToBags refuses to act while the cursor is already holding
+  -- something, rather than dropping or swapping it unexpectedly.
+  CursorHasItem = function() return true end
+  local ok, reason = ns.Scanner:WithdrawToBags(0, 1)
+  check(not ok, "WithdrawToBags refuses to run while the cursor holds an item")
+  equals(reason, "cursor is already holding something", "WithdrawToBags explains why it refused")
+  CursorHasItem = function() return false end
+end
+
+do
+  -- Every bag slot is full: there's nowhere to place the withdrawn item.
+  mockContainers({
+    [0] = { [1] = { hyperlink = "item:a" } },
+    [1] = { [1] = { hyperlink = "item:b" } },
+    [2] = { [1] = { hyperlink = "item:c" } },
+    [3] = { [1] = { hyperlink = "item:d" } },
+    [4] = { [1] = { hyperlink = "item:e" } },
+  })
+  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
+  check(not ok, "WithdrawToBags refuses to run when every bag slot is full")
+  equals(reason, "bags full", "WithdrawToBags explains why it refused")
+
+  resetScannerMocks()
+end
+
+do
+  -- Success: picks up the source slot, then places it in the first empty
+  -- bag slot found (bag 0 has an empty slot 2; slot 1 is occupied).
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local pickups = {}
+  C_Container.PickupContainerItem = function(bagID, slot)
+    table.insert(pickups, { bagID = bagID, slot = slot })
+  end
+
+  local ok = ns.Scanner:WithdrawToBags(6, 3)
+  check(ok, "WithdrawToBags succeeds when an empty bag slot exists")
+  equals(#pickups, 2, "WithdrawToBags picks up the source item, then the empty destination slot")
+  equals(pickups[1].bagID, 6, "the first pickup is the source bag")
+  equals(pickups[1].slot, 3, "the first pickup is the source slot")
+  equals(pickups[2].bagID, 0, "the second pickup is the empty destination bag")
+  equals(pickups[2].slot, 2, "the second pickup is the empty destination slot")
+
+  resetScannerMocks()
+  C_Container.PickupContainerItem = function() end
+end
+
+--------------------------------------------------------------------------
+-- Classify.lua: season/tier classification and disenchant eligibility (#23)
 --------------------------------------------------------------------------
 
 stubs.loadModule(here .. "/../Classify.lua", "GearSweep", ns)
 stubs.loadModule(here .. "/../Upgrade.lua", "GearSweep", ns)
+
+-- Simulates C_TooltipInfo.GetHyperlink's structured line data: an upgrade-
+-- track line (type 32) when the item still has one (current season), tagged
+-- with the track name Classify.lua matches against ("Adventurer" or not).
+local function mockUpgradeTrack(trackName)
+  C_TooltipInfo.GetHyperlink = function()
+    return { lines = { { type = 32, leftText = "Upgrade Level: " .. trackName, currentLevel = 1, maxLevel = 8 } } }
+  end
+end
+
+local function mockNoUpgradeTrack()
+  C_TooltipInfo.GetHyperlink = function()
+    return { lines = {} }
+  end
+end
+
+local function mockUsable(usable)
+  C_TooltipInfo.GetHyperlink = function()
+    return { lines = { { type = 43, usable = usable, leftText = "Requires Level 80" } } }
+  end
+end
+
+local function resetTooltipMock()
+  C_TooltipInfo.GetHyperlink = function() return nil end
+end
+
+do
+  mockUpgradeTrack("Adventurer")
+  check(ns.Classify:IsCurrentSeason("item:1"), "an item with an upgrade track is current-season")
+  check(ns.Classify:IsAdventurerTier("item:1"), "an Adventurer-track item is Adventurer tier")
+  resetTooltipMock()
+end
+
+do
+  mockUpgradeTrack("Champion")
+  check(ns.Classify:IsCurrentSeason("item:1"), "a Champion-track item is still current-season")
+  check(not ns.Classify:IsAdventurerTier("item:1"), "a Champion-track item is not Adventurer tier")
+  resetTooltipMock()
+end
+
+do
+  mockNoUpgradeTrack()
+  check(not ns.Classify:IsCurrentSeason("item:1"),
+    "an item with no upgrade track at all is not current-season")
+  check(not ns.Classify:IsAdventurerTier("item:1"),
+    "an item with no upgrade track is not Adventurer tier")
+  resetTooltipMock()
+end
+
+do
+  -- GetHyperlink returning nil outright (no data at all, distinct from an
+  -- empty lines table) hits the same "no track info" branch.
+  check(not ns.Classify:IsCurrentSeason("item:1"),
+    "with no tooltip data available at all, an item is not treated as current-season")
+end
+
+do
+  mockUsable(false)
+  check(not ns.Classify:IsUsable("item:1"), "a requirement line with usable=false is not usable")
+  resetTooltipMock()
+end
+
+do
+  mockUsable(true)
+  check(ns.Classify:IsUsable("item:1"), "a requirement line with usable=true is usable")
+  resetTooltipMock()
+end
+
+do
+  mockNoUpgradeTrack()
+  check(ns.Classify:IsUsable("item:1"), "an item with no requirement line at all is usable")
+  resetTooltipMock()
+end
+
+do
+  check(ns.Classify:IsDisenchantEligibleQuality(2), "Uncommon is disenchant-eligible")
+  check(ns.Classify:IsDisenchantEligibleQuality(3), "Rare is disenchant-eligible")
+  check(ns.Classify:IsDisenchantEligibleQuality(4), "Epic is disenchant-eligible")
+  check(not ns.Classify:IsDisenchantEligibleQuality(0), "Poor is not disenchant-eligible")
+  check(not ns.Classify:IsDisenchantEligibleQuality(1), "Common is not disenchant-eligible")
+end
+
+local function disenchantItem(quality)
+  return { quality = quality, hyperlink = "item:1" }
+end
+
+do
+  mockUpgradeTrack("Adventurer")
+  check(ns.Classify:IsDisenchantCandidate(disenchantItem(3)),
+    "a Rare Adventurer-tier item is a disenchant candidate")
+  resetTooltipMock()
+end
+
+do
+  mockNoUpgradeTrack()
+  check(ns.Classify:IsDisenchantCandidate(disenchantItem(4)),
+    "an Epic previous-season item (no upgrade track) is a disenchant candidate")
+  resetTooltipMock()
+end
+
+do
+  mockUpgradeTrack("Champion")
+  check(not ns.Classify:IsDisenchantCandidate(disenchantItem(4)),
+    "a current-season Epic item above Adventurer tier is not a disenchant candidate")
+  resetTooltipMock()
+end
+
+do
+  mockNoUpgradeTrack()
+  check(not ns.Classify:IsDisenchantCandidate(disenchantItem(1)),
+    "a Common-quality item is never a disenchant candidate, even from a previous season")
+  resetTooltipMock()
+end
+
+--------------------------------------------------------------------------
+-- Classify.lua: "Best in Slot" spec-relevance (#23)
+--------------------------------------------------------------------------
+
+-- Populates the background scan tooltip's lines (see wow_stubs.lua's
+-- CreateFrame) as Classify:GetBestInSlotSpecs reads them: consecutive
+-- _G[tooltipName .. "TextLeft" .. i] font strings.
+local TOOLTIP_NAME = "GearSweepClassifyTooltip"
+
+local function mockTooltipLines(lines)
+  for i, text in ipairs(lines) do
+    _G[TOOLTIP_NAME .. "TextLeft" .. i] = { GetText = function() return text end }
+  end
+  _G[TOOLTIP_NAME .. "TextLeft" .. (#lines + 1)] = nil
+end
+
+do
+  mockTooltipLines({ "Epic", "Item Level 480" })
+  local specs = ns.Classify:GetBestInSlotSpecs("item:1")
+  equals(#specs, 0, "an item with no 'Best in Slot' annotation has no listed specs")
+end
+
+do
+  mockTooltipLines({
+    "Epic", "Item Level 480", "Best in Slot", "Holy Paladin", "Protection Paladin", "", "Requires Level 80",
+  })
+  local specs = ns.Classify:GetBestInSlotSpecs("item:1")
+  equals(#specs, 2, "specs are read until the blank line that ends the 'Best in Slot' section")
+  equals(specs[1], "Holy Paladin", "the first listed spec is read")
+  equals(specs[2], "Protection Paladin", "the second listed spec is read")
+end
+
+do
+  -- No annotation at all: not a signal either way, so it's never grounds to
+  -- exclude an otherwise-usable item.
+  mockTooltipLines({ "Epic", "Item Level 480" })
+  check(ns.Classify:IsSpecAppropriate("item:1"),
+    "an item with no 'Best in Slot' annotation is spec-appropriate by default")
+end
+
+do
+  mockTooltipLines({ "Best in Slot", "Holy Paladin", "" })
+  UnitClass = function() return "Paladin" end
+  GetSpecialization = function() return 1 end
+  GetSpecializationInfo = function() return nil, "Holy" end
+  check(ns.Classify:IsSpecAppropriate("item:1"),
+    "an item annotated for the player's actual class and spec is spec-appropriate")
+
+  GetSpecializationInfo = function() return nil, "Protection" end
+  check(not ns.Classify:IsSpecAppropriate("item:1"),
+    "an item annotated only for a different spec of the same class is not spec-appropriate")
+
+  UnitClass = function() return "Warrior" end
+  GetSpecializationInfo = function() return nil, "Holy" end
+  check(not ns.Classify:IsSpecAppropriate("item:1"),
+    "an item annotated for the same spec name but a different class is not spec-appropriate")
+
+  UnitClass = function() return nil end
+  GetSpecialization = function() return nil end
+  GetSpecializationInfo = function() return nil end
+end
+
+--------------------------------------------------------------------------
+-- Upgrade best-per-slot selection (v0.4.0, #16)
+--------------------------------------------------------------------------
 
 --------------------------------------------------------------------------
 -- Class armor/weapon proficiency (v0.4.0, #35)
@@ -608,6 +985,105 @@ do
   ns.Upgrade.FindEquippedLink = function() return "item:equipped-1", "HeadSlot" end
   dispatch("debug item nonexistent")
   equals(dumpedLink, "item:equipped-1", "debug item falls back to searching equipped slots")
+end
+
+--------------------------------------------------------------------------
+-- UI.lua: quality/slot/item-level filtering (#23)
+--------------------------------------------------------------------------
+
+stubs.loadModule(here .. "/../UI.lua", "GearSweep", ns)
+
+do
+  local filters = { excludedQualities = { [2] = true }, excludedSlotGroups = {}, minLevel = 1, maxLevel = 999 }
+  local uncommon = { quality = 2, equipLoc = "INVTYPE_HEAD", itemLevel = 100 }
+  check(not ns.UI.PassesCommonFilters(uncommon, filters), "an excluded quality fails the common filter")
+end
+
+do
+  local filters = { excludedQualities = {}, excludedSlotGroups = { WEAPON = true }, minLevel = 1, maxLevel = 999 }
+  local sword = { quality = 4, equipLoc = "INVTYPE_WEAPON", itemLevel = 100 }
+  check(not ns.UI.PassesCommonFilters(sword, filters), "an excluded slot group fails the common filter")
+
+  local offhandSword = { quality = 4, equipLoc = "INVTYPE_WEAPONOFFHAND", itemLevel = 100 }
+  check(ns.UI.PassesCommonFilters(offhandSword, filters),
+    "an off-hand weapon is grouped separately from the Weapon slot group, so it's unaffected")
+end
+
+do
+  local filters = { excludedQualities = {}, excludedSlotGroups = {}, minLevel = 200, maxLevel = 300 }
+  check(not ns.UI.PassesCommonFilters({ quality = 4, equipLoc = "INVTYPE_HEAD", itemLevel = 199 }, filters),
+    "an item below minLevel fails the common filter")
+  check(not ns.UI.PassesCommonFilters({ quality = 4, equipLoc = "INVTYPE_HEAD", itemLevel = 301 }, filters),
+    "an item above maxLevel fails the common filter")
+  check(ns.UI.PassesCommonFilters({ quality = 4, equipLoc = "INVTYPE_HEAD", itemLevel = 250 }, filters),
+    "an item within the level range passes the common filter")
+  check(ns.UI.PassesCommonFilters({ quality = 4, equipLoc = "INVTYPE_HEAD" }, filters),
+    "an item with no item level at all bypasses the level range check")
+end
+
+do
+  mockUpgradeTrack("Adventurer")
+  local filters = { excludedQualities = {}, excludedSlotGroups = {}, minLevel = 1, maxLevel = 999,
+    includeAdventurerTier = true, includePreviousSeason = true }
+  local candidate = { quality = 3, equipLoc = "INVTYPE_HEAD", itemLevel = 100, hyperlink = "item:1" }
+  check(ns.UI.PassesDisenchantFilters(candidate, filters),
+    "an Adventurer-tier item passes disenchant filters when Adventurer inclusion is on")
+
+  filters.includeAdventurerTier = false
+  check(not ns.UI.PassesDisenchantFilters(candidate, filters),
+    "an Adventurer-tier item is excluded from disenchant filters when Adventurer inclusion is off")
+  resetTooltipMock()
+end
+
+do
+  mockNoUpgradeTrack()
+  local filters = { excludedQualities = {}, excludedSlotGroups = {}, minLevel = 1, maxLevel = 999,
+    includeAdventurerTier = true, includePreviousSeason = true }
+  local candidate = { quality = 4, equipLoc = "INVTYPE_CHEST", itemLevel = 100, hyperlink = "item:2" }
+  check(ns.UI.PassesDisenchantFilters(candidate, filters),
+    "a previous-season item passes disenchant filters when previous-season inclusion is on")
+
+  filters.includePreviousSeason = false
+  check(not ns.UI.PassesDisenchantFilters(candidate, filters),
+    "a previous-season item is excluded from disenchant filters when previous-season inclusion is off")
+  resetTooltipMock()
+end
+
+do
+  mockUpgradeTrack("Champion")
+  local filters = { excludedQualities = {}, excludedSlotGroups = {}, minLevel = 1, maxLevel = 999,
+    includeAdventurerTier = true, includePreviousSeason = true }
+  local candidate = { quality = 4, equipLoc = "INVTYPE_CHEST", itemLevel = 100, hyperlink = "item:3" }
+  check(not ns.UI.PassesDisenchantFilters(candidate, filters),
+    "a current-season item above Adventurer tier never passes disenchant filters")
+  resetTooltipMock()
+end
+
+do
+  -- ns.Classify.IsUsable/IsSpecAppropriate are stubbed true for the rest of
+  -- this file (see the "Upgrade vs. currently-equipped gear" section above),
+  -- isolating this to class proficiency, item level, and slot filtering.
+  UnitClassBase = function() return "MAGE" end
+  GetInventoryItemLink = function() return nil end
+  GetAverageItemLevel = function() return 0, 0, 0 end
+
+  local filters = { excludedQualities = {}, excludedSlotGroups = {}, minLevel = 1, maxLevel = 999 }
+
+  local shield = { quality = 4, equipLoc = "INVTYPE_SHIELD", itemLevel = 100,
+    classID = 4, subclassID = 6, hyperlink = "item:shield" }
+  check(not ns.UI.PassesUpgradeFilters(shield, filters),
+    "a class-inappropriate item (a shield for a Mage) never passes upgrade filters")
+
+  local cloth = { quality = 4, equipLoc = "INVTYPE_CHEST", itemLevel = 100,
+    classID = 4, subclassID = 1, hyperlink = "item:cloth" }
+  check(ns.UI.PassesUpgradeFilters(cloth, filters),
+    "a usable item genuinely higher than the (empty) equipped slot passes upgrade filters")
+
+  filters.excludedSlotGroups = { CHEST = true }
+  check(not ns.UI.PassesUpgradeFilters(cloth, filters),
+    "an otherwise-valid upgrade is still excluded by an excluded slot group")
+
+  UnitClassBase = function() return nil end
 end
 
 --------------------------------------------------------------------------

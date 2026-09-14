@@ -120,6 +120,13 @@ local function PassesUpgradeFilters(item, filters)
   return PassesCommonFilters(item, filters)
 end
 
+-- Exposed for the offline test suite (#23), which can't drive these through
+-- UI:Refresh without a full frame/template environment; production code
+-- keeps calling the local functions above directly.
+UI.PassesCommonFilters = PassesCommonFilters
+UI.PassesDisenchantFilters = PassesDisenchantFilters
+UI.PassesUpgradeFilters = PassesUpgradeFilters
+
 --------------------------------------------------------------------------
 -- Frame
 --------------------------------------------------------------------------

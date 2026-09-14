@@ -60,6 +60,17 @@ All notable changes to GearSweep are documented in this file.
   pull actions now print debug-gated detail (item counts, what got pulled
   or skipped and why) to help diagnose a wrong result without needing a
   fresh repro.
+- Full offline test coverage for `Scanner.lua` and the classification/
+  filtering logic in `Classify.lua`/`UI.lua` (#23): bag/bank location
+  discovery and item enumeration (including the shirt/tabard/non-gear
+  exclusion and the withdraw-to-bags pickup/place mechanics), disenchant
+  eligibility (quality floor, Adventurer-tier/previous-season detection),
+  "Best in Slot" spec-relevance matching, and the quality/slot/item-level
+  narrowing shared by both sweep modes - the concrete gap left after
+  earlier passes had already covered upgrade classification and
+  best-per-slot selection. `UI.lua`'s three filter-gate functions are now
+  also exposed on the `UI` table so the offline suite can exercise them
+  directly, without needing a full frame/template environment.
 
 ### Changed
 - Relicensed from MIT to GPL-3.0-or-later (#27), matching Crosshairs among
