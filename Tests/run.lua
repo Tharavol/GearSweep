@@ -416,6 +416,34 @@ do
   C_Container.PickupContainerItem = function() end
 end
 
+do
+  -- #41: if the destination slot wasn't actually empty by the time the
+  -- placement landed, the cursor is left still holding the item - this
+  -- must be reported as a failure and the item put back, not silently
+  -- counted as a successful move.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [1] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local pickups = {}
+  local pickupCount = 0
+  C_Container.PickupContainerItem = function(bagID, slot)
+    pickupCount = pickupCount + 1
+    table.insert(pickups, { bagID = bagID, slot = slot })
+  end
+  CursorHasItem = function() return pickupCount == 2 end
+
+  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
+  check(not ok, "WithdrawToBags reports failure when the cursor is still holding the item after placement")
+  equals(reason, "failed to place item", "WithdrawToBags explains why it failed")
+  equals(#pickups, 3, "WithdrawToBags puts the item back rather than leaving the cursor stuck")
+  equals(pickups[3].bagID, 6, "the recovery pickup targets the original source bag")
+  equals(pickups[3].slot, 1, "the recovery pickup targets the original source slot")
+
+  CursorHasItem = function() return false end
+  resetScannerMocks()
+  C_Container.PickupContainerItem = function() end
+end
+
 --------------------------------------------------------------------------
 -- Classify.lua: season/tier classification and disenchant eligibility (#23)
 --------------------------------------------------------------------------

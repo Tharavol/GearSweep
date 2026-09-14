@@ -331,6 +331,8 @@ local function PullSelected()
       return
     end
 
+    ns.Debug("PullSelected: item %d/%d - %s (bag %d, slot %d)",
+      index, #queue, row.item.name or row.item.hyperlink, row.item.bagID, row.item.slot)
     local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
     if ok then
       moved = moved + 1

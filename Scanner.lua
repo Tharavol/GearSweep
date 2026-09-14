@@ -176,7 +176,27 @@ function Scanner:WithdrawToBags(bagID, slot)
     return false, "bags full"
   end
 
+  ns.Debug("WithdrawToBags: bag %d slot %d -> bag %d slot %d (cursor busy beforehand: %s)",
+    bagID, slot, emptyBag, emptySlot, tostring(CursorHasItem()))
+
   C_Container.PickupContainerItem(bagID, slot)
+  ns.Debug("WithdrawToBags: after pickup - cursor holding: %s, source slot still occupied: %s",
+    tostring(CursorHasItem()), tostring(C_Container.GetContainerItemInfo(bagID, slot) ~= nil))
+
   C_Container.PickupContainerItem(emptyBag, emptySlot)
+  local stillHolding = CursorHasItem()
+  ns.Debug("WithdrawToBags: after place - cursor still holding: %s, destination now occupied: %s",
+    tostring(stillHolding), tostring(C_Container.GetContainerItemInfo(emptyBag, emptySlot) ~= nil))
+
+  if stillHolding then
+    -- The destination slot wasn't actually empty by the time the placement
+    -- landed (#41) - put the item back where it came from rather than
+    -- leaving the cursor stuck holding it, which would also cascade into
+    -- every subsequent withdrawal in the same pull failing with "cursor is
+    -- already holding something".
+    C_Container.PickupContainerItem(bagID, slot)
+    return false, "failed to place item"
+  end
+
   return true
 end

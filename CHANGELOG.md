@@ -205,3 +205,14 @@ All notable changes to GearSweep are documented in this file.
   with the first item's still-settling placement, silently failing while
   still counted as moved. Withdrawals are now issued one at a time, a
   tick apart.
+- #41 was still reproducing live after the above (still not confirmed
+  fixed). `Scanner:WithdrawToBags` now verifies the cursor actually let go
+  of the item after the placement attempt, rather than assuming the two
+  `PickupContainerItem` calls always succeed - if the destination slot
+  wasn't really empty by the time the placement landed, it's reported as
+  "failed to place item" and the item is put back where it came from
+  instead of leaving the cursor stuck (which would otherwise cascade into
+  every later withdrawal in the same pull failing with "cursor is already
+  holding something"). Added `/gs debug`-gated tracing through the pull
+  sequence and each withdrawal's pickup/place steps to diagnose this
+  further if it recurs.
