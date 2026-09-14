@@ -28,15 +28,6 @@ local OFF_HAND = {
 -- both be genuine upgrades at once.
 local DUAL_SLOT = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
 
--- Every equip loc that physically occupies the off-hand slot. None of
--- these can ever be equipped while a two-hand weapon is in the main hand
--- (#36) - a hard game rule, not an item-level question: an ilvl 15
--- off-hand trinket doesn't become invalid because it's weak, it's
--- invalid because there's nowhere for it to go right now.
-local OCCUPIES_SECONDARY_HAND = {
-  INVTYPE_WEAPONOFFHAND = true, INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true, INVTYPE_RELIC = true,
-}
-
 -- Real inventory slot names (Blizzard's GetInventorySlotInfo) an equip
 -- location's currently-equipped item level gets read from, for the "is
 -- this actually higher than what I'm wearing" comparison below. Finger and
@@ -193,9 +184,10 @@ function Upgrade:FindEquippedLink(query)
   return nil
 end
 
--- True when a two-hand weapon currently occupies the main hand, meaning
--- the off-hand slot itself is unusable right now regardless of what's
--- offered for it (#36).
+-- True when a two-hand weapon currently occupies the main hand. Used by
+-- SelectBest to score the two-hand/one-hand+offhand decision (#37) -
+-- not a hard gate in IsCandidate, since a class that can go either way
+-- might have a one-hand+offhand combo worth switching to.
 local function IsMainHandTwoHanded()
   local slotID = GetInventorySlotInfo("MainHandSlot")
   local link = slotID and GetInventoryItemLink("player", slotID)
@@ -209,8 +201,10 @@ end
 -- proficiency (#35 - a hand-maintained table, since no live signal covers
 -- this for Warband Bank items), the tooltip's own requirement-line
 -- "usable" flag (level/reputation/quest gates, #8/#15), whether it's
--- relevant to the current spec, whether the off-hand slot is even usable
--- right now (#36), and whether it's actually better than what's equipped.
+-- relevant to the current spec, and whether it's actually better than
+-- what's equipped. Off-hand-slot items are not excluded just because a
+-- two-hander is currently equipped (#37) - SelectBest decides whether
+-- switching to a one-hand+offhand combo is actually worth it.
 function Upgrade:IsCandidate(item)
   if not RELEVANT_QUALITIES[item.quality] then
     return false
@@ -222,9 +216,6 @@ function Upgrade:IsCandidate(item)
     return false
   end
   if not ns.Classify:IsSpecAppropriate(item.hyperlink) then
-    return false
-  end
-  if OCCUPIES_SECONDARY_HAND[item.equipLoc] and IsMainHandTwoHanded() then
     return false
   end
   if not self:IsUpgradeOverEquipped(item) then
@@ -287,21 +278,54 @@ function Upgrade:SelectBest(candidates)
     end
   end
 
-  -- Scored as total item level filled rather than per-item, since a real
-  -- off-hand candidate means the one-hand+offhand pair covers two
-  -- independent gear slots the two-hand item would otherwise leave one of
-  -- untouched; two-hand only wins when there's no off-hand candidate to
-  -- pair with (the sum then reduces to the lone main-hand item's level).
+  -- Two-hand vs. one-hand+offhand (#37): scored as the average item level
+  -- across both weapon slots - a two-hander counts as filling both at its
+  -- own level - and compared against the average of what's actually
+  -- equipped right now, so a hybrid class that can genuinely go either
+  -- way gets whichever option is actually better, not a rule that always
+  -- favors one shape over the other. Previously off-hand items were
+  -- simply excluded outright whenever a two-hander was equipped - correct
+  -- for classes that can't dual-wield at all, but too strong for classes
+  -- that can.
   local bestTwoHand = BestOf(twoHand)
   local bestMainHand = BestOf(mainHand)
   local bestOffHand = BestOf(offHand)
-  local hasOneHand = bestMainHand or bestOffHand
 
-  if bestTwoHand and (not hasOneHand or bestTwoHand.itemLevel >= (
-      (bestMainHand and bestMainHand.itemLevel or 0) + (bestOffHand and bestOffHand.itemLevel or 0))) then
+  local equippedTwoHand = IsMainHandTwoHanded()
+  local equippedMainLevel = GetEquippedItemLevel("MainHandSlot")
+  local equippedOffLevel = GetEquippedItemLevel("SecondaryHandSlot")
+
+  -- An off-hand candidate can't be equipped on its own while a two-hander
+  -- stays equipped and no one-hand candidate exists to replace it - the
+  -- physical off-hand slot is blocked in that case, regardless of level.
+  if equippedTwoHand and not bestMainHand then
+    bestOffHand = nil
+  end
+
+  local currentAverage = equippedTwoHand
+    and equippedMainLevel
+    or (equippedMainLevel + equippedOffLevel) / 2
+
+  local twoHandAverage = bestTwoHand and bestTwoHand.itemLevel or nil
+
+  local oneHandAverage
+  if bestMainHand then
+    local offLevel = bestOffHand and bestOffHand.itemLevel or (not equippedTwoHand and equippedOffLevel or 0)
+    oneHandAverage = (bestMainHand.itemLevel + offLevel) / 2
+  end
+
+  local bestAverage, bestOption = currentAverage, "current"
+  if twoHandAverage and twoHandAverage > bestAverage then
+    bestAverage, bestOption = twoHandAverage, "twoHand"
+  end
+  if oneHandAverage and oneHandAverage > bestAverage then
+    bestOption = "oneHand"
+  end
+
+  if bestOption == "twoHand" then
     table.insert(selected, bestTwoHand)
-  elseif hasOneHand then
-    if bestMainHand then table.insert(selected, bestMainHand) end
+  elseif bestOption == "oneHand" then
+    table.insert(selected, bestMainHand)
     if bestOffHand then table.insert(selected, bestOffHand) end
   end
 

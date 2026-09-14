@@ -126,3 +126,14 @@ All notable changes to GearSweep are documented in this file.
   regardless of what's offered for it, so those items are excluded from
   candidates entirely in that case rather than compared against a
   fallback baseline.
+- #36's fix was too strong for hybrid classes that can genuinely go
+  either two-hand or one-hand+offhand (#37): it excluded off-hand
+  candidates outright any time a two-hander was equipped. Two-hand vs.
+  one-hand+offhand is now decided by comparing average item level across
+  both weapon slots - a two-hander counts as filling both at its own
+  level - against whichever is actually equipped right now, in both
+  directions, so a hybrid class gets whichever option is genuinely
+  better instead of a rule that always favors one shape. An off-hand
+  candidate still can't be suggested alone while a two-hander is equipped
+  and no one-hand candidate exists to pair it with - the slot is
+  genuinely blocked in that case.

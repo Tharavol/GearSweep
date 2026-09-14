@@ -25,9 +25,9 @@ Under active development. See the [milestones](../../milestones) and
   a slot that's never been filled), then pre-checks the single highest item
   level candidate per slot (rings and trinkets: top two, since both are
   dual-slot; two-hand weapons and one-hand+offhand pairs never both get
-  pre-checked, and off-hand items are never suggested while a two-hand
-  weapon is equipped). Uncheck a pre-selected pick or check a runner-up
-  before pulling.
+  pre-checked - whichever has the higher average item level, comparing
+  against whatever's currently equipped, wins). Uncheck a pre-selected
+  pick or check a runner-up before pulling.
 - **Auto-open**: opens the sweep window automatically when you visit your
   bank or Warband Bank. On by default; turn it off in the settings panel
   or with `/gs autoopen off`.

@@ -283,14 +283,25 @@ do
 end
 
 do
-  -- A real one-hand+offhand pair fills two independent slots, so it wins
-  -- over a two-hand item even when the two-hand's own level is higher.
+  -- #37: scored by average across both weapon slots, not summed - a
+  -- one-hand+offhand pair only wins when its average is actually higher,
+  -- not just because a real off-hand candidate happens to exist.
   local best = ns.Upgrade:SelectBest({
     item("INVTYPE_2HWEAPON", 500),
     item("INVTYPE_WEAPONMAINHAND", 400),
     item("INVTYPE_SHIELD", 400),
   })
-  equals(#best, 2, "a genuine one-hand+offhand pair beats a two-hand item")
+  equals(#best, 1, "a two-hand item beats a weaker one-hand+offhand pair by average (500 vs 400)")
+  equals(best[1].equipLoc, "INVTYPE_2HWEAPON", "the two-hand item is selected")
+end
+
+do
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_2HWEAPON", 400),
+    item("INVTYPE_WEAPONMAINHAND", 480),
+    item("INVTYPE_SHIELD", 480),
+  })
+  equals(#best, 2, "a genuinely stronger one-hand+offhand pair beats a weaker two-hand item (480 vs 400)")
   check(best[1].equipLoc ~= "INVTYPE_2HWEAPON" and best[2].equipLoc ~= "INVTYPE_2HWEAPON",
     "the two-hand item is not selected alongside the pair")
 end
@@ -299,6 +310,97 @@ do
   local best = ns.Upgrade:SelectBest({ item("INVTYPE_WEAPONMAINHAND", 460) })
   equals(#best, 1, "a lone main-hand candidate is selected on its own")
   equals(best[1].equipLoc, "INVTYPE_WEAPONMAINHAND", "the main-hand item is selected")
+end
+
+--------------------------------------------------------------------------
+-- Two-hand vs. one-hand+offhand vs. currently equipped (v0.5.0, #37)
+--------------------------------------------------------------------------
+
+local function mockEquippedWeapons(mainLink, mainEquipLoc, mainLevel, offLevel)
+  GetInventoryItemLink = function(_, slotID)
+    if slotID == GetInventorySlotInfo("MainHandSlot") then return mainLink end
+    if offLevel and slotID == GetInventorySlotInfo("SecondaryHandSlot") then return "item:equipped-off" end
+    return nil
+  end
+  C_Item.GetItemInfo = function(link)
+    if link == mainLink then
+      return "Equipped", link, 4, mainLevel, 90, "Weapon", "?", 1, mainEquipLoc
+    end
+    return nil
+  end
+  C_Item.GetDetailedItemLevelInfo = function(link)
+    if link == mainLink then return mainLevel end
+    if link == "item:equipped-off" then return offLevel end
+    return nil
+  end
+end
+
+local function resetMockedEquipment()
+  GetInventoryItemLink = function() return nil end
+  C_Item.GetItemInfo = function() return nil end
+  C_Item.GetDetailedItemLevelInfo = function() return nil end
+end
+
+do
+  -- Currently wielding a two-hander (ilvl 500): a much weaker
+  -- one-hand+offhand pair (average 300) should not be suggested.
+  mockEquippedWeapons("item:staff", "INVTYPE_2HWEAPON", 500)
+
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_WEAPONMAINHAND", 300),
+    item("INVTYPE_SHIELD", 300),
+  })
+  equals(#best, 0, "a weaker one-hand+offhand pair is not suggested over an equipped two-hander")
+
+  resetMockedEquipment()
+end
+
+do
+  -- Currently wielding a weak two-hander (ilvl 300): a genuinely stronger
+  -- one-hand+offhand pair (average 450) should be suggested.
+  mockEquippedWeapons("item:staff", "INVTYPE_2HWEAPON", 300)
+
+  local best = ns.Upgrade:SelectBest({
+    item("INVTYPE_WEAPONMAINHAND", 450),
+    item("INVTYPE_SHIELD", 450),
+  })
+  equals(#best, 2, "a genuinely stronger one-hand+offhand pair is suggested over a weak equipped two-hander")
+
+  resetMockedEquipment()
+end
+
+do
+  -- A strong off-hand candidate alone, with no one-hand candidate to pair
+  -- it with, still can't be equipped while a two-hander stays equipped.
+  mockEquippedWeapons("item:staff", "INVTYPE_2HWEAPON", 300)
+
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_SHIELD", 500) })
+  equals(#best, 0, "an off-hand item alone is never suggested while a two-hander is equipped")
+
+  resetMockedEquipment()
+end
+
+do
+  -- Vice versa: currently dual-wielding (average 300). A weaker two-hand
+  -- candidate (280) should not be suggested.
+  mockEquippedWeapons("item:mainhand", "INVTYPE_WEAPONMAINHAND", 300, 300)
+
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_2HWEAPON", 280) })
+  equals(#best, 0, "a weaker two-hand item is not suggested over an equipped one-hand+offhand pair")
+
+  resetMockedEquipment()
+end
+
+do
+  -- Vice versa: currently dual-wielding (average 300). A genuinely
+  -- stronger two-hand candidate (350) should be suggested.
+  mockEquippedWeapons("item:mainhand", "INVTYPE_WEAPONMAINHAND", 300, 300)
+
+  local best = ns.Upgrade:SelectBest({ item("INVTYPE_2HWEAPON", 350) })
+  equals(#best, 1, "a genuinely stronger two-hand item is suggested over an equipped one-hand+offhand pair")
+  equals(best[1].equipLoc, "INVTYPE_2HWEAPON", "the two-hand item is selected")
+
+  resetMockedEquipment()
 end
 
 --------------------------------------------------------------------------
@@ -341,9 +443,10 @@ do
 end
 
 do
-  -- #36: a two-hand weapon in the main hand blocks ALL off-hand-slot
-  -- items (weapon, shield, holdable) regardless of item level - a hard
-  -- game rule, not an item-level question.
+  -- #37: off-hand-slot items are no longer excluded from IsCandidate just
+  -- because a two-hander is equipped - whether switching is actually
+  -- worth it is SelectBest's job (see the average-comparison tests
+  -- above), not a blanket exclusion here.
   GetInventoryItemLink = function(_, slotID)
     if slotID == GetInventorySlotInfo("MainHandSlot") then return "item:staff" end
     return nil
@@ -354,18 +457,17 @@ do
     end
     return nil
   end
+  C_Item.GetDetailedItemLevelInfo = function(link)
+    if link == "item:staff" then return 292 end
+    return nil
+  end
+  GetAverageItemLevel = function() return 290, 290, 290 end
 
-  local shield = item("INVTYPE_SHIELD", 246)
+  local shield = item("INVTYPE_SHIELD", 300)
   shield.hyperlink = "item:shield"
   shield.quality = 4
-  check(not ns.Upgrade:IsCandidate(shield),
-    "a shield is never a candidate while a two-hand weapon is equipped")
-
-  local offhandWeapon = item("INVTYPE_WEAPONOFFHAND", 280)
-  offhandWeapon.hyperlink = "item:offhand-weapon"
-  offhandWeapon.quality = 4
-  check(not ns.Upgrade:IsCandidate(offhandWeapon),
-    "an off-hand weapon is never a candidate while a two-hand weapon is equipped")
+  check(ns.Upgrade:IsCandidate(shield),
+    "a strong shield can still be a candidate while a two-hand weapon is equipped")
 
   -- A one-hand main-hand candidate is still fine - it would simply
   -- replace the two-hander, not stack alongside it.
@@ -374,6 +476,8 @@ do
   mainHandCandidate.quality = 4
   check(ns.Upgrade:IsCandidate(mainHandCandidate),
     "a one-hand main-hand item is still a valid candidate over an equipped two-hander")
+
+  GetAverageItemLevel = function() return 0, 0, 0 end
 
   GetInventoryItemLink = function() return nil end
   C_Item.GetItemInfo = function() return nil end
