@@ -145,7 +145,7 @@ do
   ns.db.debug = true
   dispatch("debug yes")
   equals(ns.db.debug, true, "an invalid value leaves the setting unchanged")
-  equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', 'upgrades', or 'item <name>'.",
+  equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', 'upgrades', 'weapons', or 'item <name>'.",
     "an invalid value is rejected with a specific error")
   ns.db.debug = false
 end
@@ -566,15 +566,19 @@ end
 do
   -- #28: debug subcommands dispatch to Upgrade.lua's dump helpers rather
   -- than being silently swallowed like an unrecognised debug argument.
-  local slotsCalled, upgradesCalled = false, false
+  local slotsCalled, upgradesCalled, weaponsCalled = false, false, false
   ns.Upgrade.DumpEquippedSlots = function() slotsCalled = true end
   ns.Upgrade.DumpSelectedUpgrades = function() upgradesCalled = true end
+  ns.Upgrade.DumpWeaponComparison = function() weaponsCalled = true end
 
   dispatch("debug slots")
   check(slotsCalled, "debug slots dispatches to Upgrade:DumpEquippedSlots")
 
   dispatch("debug upgrades")
   check(upgradesCalled, "debug upgrades dispatches to Upgrade:DumpSelectedUpgrades")
+
+  dispatch("debug weapons")
+  check(weaponsCalled, "debug weapons dispatches to Upgrade:DumpWeaponComparison")
 end
 
 do

@@ -243,11 +243,78 @@ local function TopTwo(list)
   return sorted[1], sorted[2]
 end
 
+-- Two-hand vs. one-hand+offhand (#37), factored out of SelectBest so
+-- DumpWeaponComparison (#39) can report the exact same computation
+-- rather than a separate, driftable copy of it. Scored as the average
+-- item level across both weapon slots - a two-hander counts as filling
+-- both at its own level - and compared against the average of what's
+-- actually equipped right now, so a hybrid class that can genuinely go
+-- either way gets whichever option is actually better, not a rule that
+-- always favors one shape over the other.
+--
+-- Confirmed live via GetAverageItemLevel: Blizzard's own average item
+-- level counts a two-hand weapon TWICE - once per weapon slot - so a
+-- lone one-hand candidate with no off-hand really is only worth half its
+-- own level in this comparison, not a direct match against a two-hander.
+-- Swapping a 253 two-hander for a bare 253 one-hand weapon dropped
+-- overall average item level by 17 (275.25 -> 259.50) even though the
+-- weapon itself barely changed - the empty off-hand slot is a real loss,
+-- not a wash, since it was effectively "filled" by the two-hander's own
+-- value before.
+--
+-- Returns a table: bestTwoHand, bestMainHand, bestOffHand (candidates,
+-- any may be nil - bestOffHand is forced nil when a two-hander is
+-- equipped and no main-hand candidate exists to pair it with, since the
+-- off-hand slot is physically blocked in that case), equippedTwoHand,
+-- equippedMainLevel, equippedOffLevel, currentAverage, twoHandAverage,
+-- oneHandAverage (any of the last two may be nil if no candidate was
+-- found), and winner ("current", "twoHand", or "oneHand").
+local function DecideWeapons(twoHand, mainHand, offHand)
+  local bestTwoHand = BestOf(twoHand)
+  local bestMainHand = BestOf(mainHand)
+  local bestOffHand = BestOf(offHand)
+
+  local equippedTwoHand = IsMainHandTwoHanded()
+  local equippedMainLevel = GetEquippedItemLevel("MainHandSlot")
+  local equippedOffLevel = GetEquippedItemLevel("SecondaryHandSlot")
+
+  if equippedTwoHand and not bestMainHand then
+    bestOffHand = nil
+  end
+
+  local currentAverage = equippedTwoHand
+    and equippedMainLevel
+    or (equippedMainLevel + equippedOffLevel) / 2
+
+  local twoHandAverage = bestTwoHand and bestTwoHand.itemLevel or nil
+
+  local oneHandAverage
+  if bestMainHand then
+    local offLevel = bestOffHand and bestOffHand.itemLevel or (not equippedTwoHand and equippedOffLevel or 0)
+    oneHandAverage = (bestMainHand.itemLevel + offLevel) / 2
+  end
+
+  local bestAverage, winner = currentAverage, "current"
+  if twoHandAverage and twoHandAverage > bestAverage then
+    bestAverage, winner = twoHandAverage, "twoHand"
+  end
+  if oneHandAverage and oneHandAverage > bestAverage then
+    winner = "oneHand"
+  end
+
+  return {
+    bestTwoHand = bestTwoHand, bestMainHand = bestMainHand, bestOffHand = bestOffHand,
+    equippedTwoHand = equippedTwoHand, equippedMainLevel = equippedMainLevel, equippedOffLevel = equippedOffLevel,
+    currentAverage = currentAverage, twoHandAverage = twoHandAverage, oneHandAverage = oneHandAverage,
+    winner = winner,
+  }
+end
+
 -- Given an already-filtered candidate set (see IsCandidate), returns the
 -- items to pre-check as "the" upgrade pick for each slot: the single
 -- highest item level per slot, except rings/trinkets (top two distinct
 -- items) and the two-hand/one-hand+offhand pair (whichever combination
--- scores higher as a set, never both at once).
+-- scores higher as a set, never both at once - see DecideWeapons).
 function Upgrade:SelectBest(candidates)
   local buckets = {}
   local twoHand, mainHand, offHand = {}, {}, {}
@@ -278,68 +345,49 @@ function Upgrade:SelectBest(candidates)
     end
   end
 
-  -- Two-hand vs. one-hand+offhand (#37): scored as the average item level
-  -- across both weapon slots - a two-hander counts as filling both at its
-  -- own level - and compared against the average of what's actually
-  -- equipped right now, so a hybrid class that can genuinely go either
-  -- way gets whichever option is actually better, not a rule that always
-  -- favors one shape over the other. Previously off-hand items were
-  -- simply excluded outright whenever a two-hander was equipped - correct
-  -- for classes that can't dual-wield at all, but too strong for classes
-  -- that can.
-  local bestTwoHand = BestOf(twoHand)
-  local bestMainHand = BestOf(mainHand)
-  local bestOffHand = BestOf(offHand)
-
-  local equippedTwoHand = IsMainHandTwoHanded()
-  local equippedMainLevel = GetEquippedItemLevel("MainHandSlot")
-  local equippedOffLevel = GetEquippedItemLevel("SecondaryHandSlot")
-
-  -- An off-hand candidate can't be equipped on its own while a two-hander
-  -- stays equipped and no one-hand candidate exists to replace it - the
-  -- physical off-hand slot is blocked in that case, regardless of level.
-  if equippedTwoHand and not bestMainHand then
-    bestOffHand = nil
-  end
-
-  local currentAverage = equippedTwoHand
-    and equippedMainLevel
-    or (equippedMainLevel + equippedOffLevel) / 2
-
-  local twoHandAverage = bestTwoHand and bestTwoHand.itemLevel or nil
-
-  -- Confirmed live via GetAverageItemLevel: Blizzard's own average item
-  -- level counts a two-hand weapon TWICE - once per weapon slot - so a
-  -- lone one-hand candidate with no off-hand really is only worth half
-  -- its own level in this comparison, not a direct match against a
-  -- two-hander. Swapping a 253 two-hander for a bare 253 one-hand weapon
-  -- dropped overall average item level by 17 (275.25 -> 259.50) even
-  -- though the weapon itself barely changed - the empty off-hand slot is
-  -- a real loss, not a wash, since it was effectively "filled" by the
-  -- two-hander's own value before. (A prior version of this compared a
-  -- lone main-hand candidate directly, reasoning the off-hand was empty
-  -- either way - that reasoning didn't hold once checked against real
-  -- data, so it was reverted.)
-  local oneHandAverage
-  if bestMainHand then
-    local offLevel = bestOffHand and bestOffHand.itemLevel or (not equippedTwoHand and equippedOffLevel or 0)
-    oneHandAverage = (bestMainHand.itemLevel + offLevel) / 2
-  end
-
-  local bestAverage, bestOption = currentAverage, "current"
-  if twoHandAverage and twoHandAverage > bestAverage then
-    bestAverage, bestOption = twoHandAverage, "twoHand"
-  end
-  if oneHandAverage and oneHandAverage > bestAverage then
-    bestOption = "oneHand"
-  end
-
-  if bestOption == "twoHand" then
-    table.insert(selected, bestTwoHand)
-  elseif bestOption == "oneHand" then
-    table.insert(selected, bestMainHand)
-    if bestOffHand then table.insert(selected, bestOffHand) end
+  local decision = DecideWeapons(twoHand, mainHand, offHand)
+  if decision.winner == "twoHand" then
+    table.insert(selected, decision.bestTwoHand)
+  elseif decision.winner == "oneHand" then
+    table.insert(selected, decision.bestMainHand)
+    if decision.bestOffHand then table.insert(selected, decision.bestOffHand) end
   end
 
   return selected
+end
+
+-- #39 debug dump: the exact weapon-slot comparison DecideWeapons computed
+-- - equipped state, both options' scores, and which won - so a
+-- discrepancy can be diagnosed from the numbers directly instead of
+-- needing character-pane screenshots.
+function Upgrade:DumpWeaponComparison()
+  local scanned = ns.Scanner:ScanAll()
+  local twoHand, mainHand, offHand = {}, {}, {}
+
+  for _, item in ipairs(scanned) do
+    if self:IsCandidate(item) then
+      if TWO_HAND[item.equipLoc] then
+        table.insert(twoHand, item)
+      elseif MAIN_HAND[item.equipLoc] then
+        table.insert(mainHand, item)
+      elseif OFF_HAND[item.equipLoc] then
+        table.insert(offHand, item)
+      end
+    end
+  end
+
+  local d = DecideWeapons(twoHand, mainHand, offHand)
+
+  ns.Print("Weapon comparison:")
+  print(("  Equipped: %s two-hand, main-hand ilvl %d, off-hand ilvl %d"):format(
+    d.equippedTwoHand and "is" or "not", d.equippedMainLevel, d.equippedOffLevel))
+  print(("  Current average: %.1f"):format(d.currentAverage))
+  print(("  Two-hand candidate: %s (average %s)"):format(
+    d.bestTwoHand and (d.bestTwoHand.name or d.bestTwoHand.hyperlink) or "none",
+    d.twoHandAverage and ("%.1f"):format(d.twoHandAverage) or "n/a"))
+  print(("  One-hand candidate: main-hand %s, off-hand %s (average %s)"):format(
+    d.bestMainHand and (d.bestMainHand.name or d.bestMainHand.hyperlink) or "none",
+    d.bestOffHand and (d.bestOffHand.name or d.bestOffHand.hyperlink) or "none",
+    d.oneHandAverage and ("%.1f"):format(d.oneHandAverage) or "n/a"))
+  print(("  Winner: %s"):format(d.winner))
 end

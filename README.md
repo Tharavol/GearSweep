@@ -42,6 +42,7 @@ Under active development. See the [milestones](../../milestones) and
 | `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
 | `/gs debug slots` | Prints current item level in every equipment slot. |
 | `/gs debug upgrades` | Prints the items Upgrade mode currently selects, and the equipped item level each was compared against. |
+| `/gs debug weapons` | Prints the two-hand vs. one-hand+offhand comparison: equipped state, both options' scores, and which won. |
 | `/gs debug item <name>` | Prints an item's raw tooltip data (by case-insensitive substring match, bags/bank first, then equipped). |
 | `/gs status` | Shows current settings. |
 | `/gs version` | Shows the addon version. |

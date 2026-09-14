@@ -44,6 +44,7 @@ local COMMANDS = {
       "|cffffff00/gs debug [on|off]|r - toggle or set diagnostic messages",
       "|cffffff00/gs debug slots|r - print current item level in every equipment slot",
       "|cffffff00/gs debug upgrades|r - print the items Upgrade mode currently selects",
+      "|cffffff00/gs debug weapons|r - print the two-hand vs. one-hand+offhand comparison",
       "|cffffff00/gs debug item <name>|r - print an item's raw tooltip data by name",
     },
     handler = function(_, rest)
@@ -58,6 +59,9 @@ local COMMANDS = {
         return
       elseif rest == "upgrades" then
         ns.Upgrade:DumpSelectedUpgrades()
+        return
+      elseif rest == "weapons" then
+        ns.Upgrade:DumpWeaponComparison()
         return
       elseif rest:match("^item%s+%S") then
         local query = rest:match("^item%s+(.+)$")
@@ -86,7 +90,7 @@ local COMMANDS = {
         end
         return
       else
-        ns.Print("'%s' - expected 'on', 'off', 'slots', 'upgrades', or 'item <name>'.", rest)
+        ns.Print("'%s' - expected 'on', 'off', 'slots', 'upgrades', 'weapons', or 'item <name>'.", rest)
         return
       end
       ns.Print("Debug messages are %s.", ns.db.debug and "|cff00ff00on|r" or "|cffff0000off|r")

@@ -66,6 +66,12 @@ All notable changes to GearSweep are documented in this file.
   other Tharavol addons. `LICENSE`, the `.toc`'s `X-License`, and the
   README's License section were updated together.
 
+- `/gs debug weapons` (#39): prints the two-hand vs. one-hand+offhand
+  comparison - equipped state, both options' computed averages, and
+  which won - sharing the exact same computation SelectBest uses (no
+  separate, driftable copy), so a discrepancy can be diagnosed from the
+  numbers directly instead of needing character-pane screenshots.
+
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by
   reference instead of copying it, which would have let the first filter
