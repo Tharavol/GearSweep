@@ -86,9 +86,11 @@ All notable changes to GearSweep are documented in this file.
   RelayoutFrame only advanced past a section's own header row when
   expanded (via the first checkbox row sharing it); collapsed sections
   never accounted for that row on their own.
-- Upgrade mode suggested items the character's class can't equip at all
-  (e.g. a shield on a Mage) (#35): confirmed live that the item's tooltip
-  carried no class/armor/weapon proficiency signal whatsoever - the
-  tooltip-based `IsUsable` check this relied on genuinely had no data to
-  work with. Now also gated on `C_Item.IsUsableItem`, the actual Blizzard
-  API for this, confirmed live to correctly report the mismatch.
+- Reverted a same-day `C_Item.IsUsableItem` fix for #35 (a shield
+  suggested for a Mage): confirmed live it also returns usable=false for
+  a plain cloth chest piece the same Mage can obviously wear, as long as
+  the item is still Warband-Bank-sourced ("Binds to Warband until
+  equipped") - it isn't a proficiency signal for these items at all,
+  likely some ownership/binding gate instead. #35 remains open: neither
+  the tooltip nor IsUsableItem carries a usable proficiency signal for
+  Warband Bank items.

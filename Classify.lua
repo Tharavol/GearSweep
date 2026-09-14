@@ -82,21 +82,18 @@ function Classify:IsAdventurerTier(link)
   return track ~= nil and track.name == "Adventurer"
 end
 
--- C_Item.IsUsableItem is the real class/armor/weapon proficiency signal
--- (#35): confirmed live that a shield's tooltip on a Mage carries no
--- requirement line at all (no "Classes:" text, structured or plain) - the
--- only type-43 line was "Requires Level 90", usable=true - yet
--- IsUsableItem correctly reported usable=false. Tooltip requirement lines
--- (level/reputation/quest-gated items, still real and still worth
--- catching) are checked as a second, independent gate.
+-- C_Item.IsUsableItem looked like the real class/armor/weapon proficiency
+-- signal (#35) - it correctly flagged a shield as unusable on a Mage -
+-- but confirmed live it ALSO returns usable=false for a plain cloth chest
+-- piece the same Mage can obviously wear, as long as the item is still
+-- Warband-Bank-sourced ("Binds to Warband until equipped", not yet bound
+-- to this character). It isn't a proficiency check for these items at
+-- all - likely some form of ownership/binding gate - so it's not used
+-- here. Scans structured requirement lines (type 43: level/skill/
+-- reputation requirements) for Blizzard's own "usable" flag instead; see
+-- #35 for the still-open problem of detecting armor/weapon proficiency
+-- itself, which this tooltip data doesn't carry for these items either.
 function Classify:IsUsable(link)
-  if C_Item and C_Item.IsUsableItem then
-    local usable = C_Item.IsUsableItem(link)
-    if usable == false then
-      return false
-    end
-  end
-
   if not C_TooltipInfo then
     return true
   end
