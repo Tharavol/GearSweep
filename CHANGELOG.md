@@ -142,3 +142,7 @@ All notable changes to GearSweep are documented in this file.
   halving its effective value against the equipped two-hander (confirmed
   live: a 292 wand lost to a 256 staff). Switching to it doesn't cost an
   off-hand item that was never there, so this now compares directly.
+- Off-hand weapons (`INVTYPE_WEAPONOFFHAND`, for dual-wielders) were
+  labeled "Weapon" in the results list, indistinguishable from a
+  main-hand item at a glance (#38) - now grouped under "Off Hand" with
+  shields/holdables/relics.

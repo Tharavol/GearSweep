@@ -27,11 +27,17 @@ local SLOT_GROUPS = {
   { id = "FEET", label = "Feet", equipLocs = { "INVTYPE_FEET" } },
   { id = "FINGER", label = "Finger", equipLocs = { "INVTYPE_FINGER" } },
   { id = "TRINKET", label = "Trinket", equipLocs = { "INVTYPE_TRINKET" } },
+  -- INVTYPE_WEAPONOFFHAND (a literal off-hand weapon, for dual-wielders)
+  -- groups with Off Hand, not Weapon: it's indistinguishable from a
+  -- main-hand item by label otherwise, confirmed live to cause exactly
+  -- that confusion when reading the results list.
   { id = "WEAPON", label = "Weapon", equipLocs = {
       "INVTYPE_WEAPON", "INVTYPE_2HWEAPON", "INVTYPE_WEAPONMAINHAND",
-      "INVTYPE_WEAPONOFFHAND", "INVTYPE_RANGED", "INVTYPE_RANGEDRIGHT", "INVTYPE_THROWN",
+      "INVTYPE_RANGED", "INVTYPE_RANGEDRIGHT", "INVTYPE_THROWN",
     } },
-  { id = "OFFHAND", label = "Off Hand", equipLocs = { "INVTYPE_SHIELD", "INVTYPE_HOLDABLE", "INVTYPE_RELIC" } },
+  { id = "OFFHAND", label = "Off Hand", equipLocs = {
+      "INVTYPE_WEAPONOFFHAND", "INVTYPE_SHIELD", "INVTYPE_HOLDABLE", "INVTYPE_RELIC",
+    } },
 }
 
 local EQUIP_LOC_TO_GROUP = {}
