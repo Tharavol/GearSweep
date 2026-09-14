@@ -165,3 +165,18 @@ All notable changes to GearSweep are documented in this file.
   labeled "Weapon" in the results list, indistinguishable from a
   main-hand item at a glance (#38) - now grouped under "Off Hand" with
   shields/holdables/relics.
+- Edge-case pass (#25): `Scanner:WithdrawToBags` now confirms the source
+  slot still holds an item immediately before touching the cursor,
+  reporting "item is no longer there" instead of a no-op pickup call if it
+  doesn't - covers the item having already been moved, and is a defensive
+  guard for the bank closing or a disconnect mid-pull (the exact behavior
+  of a real disconnect mid-pull is still unconfirmed live; see #24).
+  "Pull Selected" now stops issuing withdrawals the moment bags fill up
+  instead of repeating the identical failing bag scan for every other
+  checked item, while still reporting the full remaining count, and
+  reports whatever the actual skip reason was instead of always assuming
+  the cursor was busy. Added a regression test locking in #35's finding
+  that item bind state never affects classification. Confirmed by code
+  review (no change needed): an empty bank/no matching items already
+  renders as "0 matching items" rather than erroring, and an item with no
+  spec-relevance annotation already defaults to spec-appropriate (#23).

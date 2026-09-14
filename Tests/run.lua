@@ -365,6 +365,7 @@ do
     [2] = { [1] = { hyperlink = "item:c" } },
     [3] = { [1] = { hyperlink = "item:d" } },
     [4] = { [1] = { hyperlink = "item:e" } },
+    [6] = { [1] = { hyperlink = "item:bank" } },
   })
   local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
   check(not ok, "WithdrawToBags refuses to run when every bag slot is full")
@@ -374,9 +375,28 @@ do
 end
 
 do
+  -- The source slot no longer holds anything by the time this runs - the
+  -- bank was closed, the player disconnected mid-pull, or the item was
+  -- already moved some other way (#25). WithdrawToBags must say so rather
+  -- than silently touching the cursor for nothing.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } } })
+  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
+  check(not ok, "WithdrawToBags refuses to run when the source slot is empty")
+  equals(reason, "item is no longer there", "WithdrawToBags explains why it refused")
+
+  local pickups = 0
+  C_Container.PickupContainerItem = function() pickups = pickups + 1 end
+  ns.Scanner:WithdrawToBags(6, 1)
+  equals(pickups, 0, "WithdrawToBags never touches the cursor when the source slot is already empty")
+  C_Container.PickupContainerItem = function() end
+
+  resetScannerMocks()
+end
+
+do
   -- Success: picks up the source slot, then places it in the first empty
   -- bag slot found (bag 0 has an empty slot 2; slot 1 is occupied).
-  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } } })
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
   C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
 
   local pickups = {}
@@ -1084,6 +1104,97 @@ do
     "an otherwise-valid upgrade is still excluded by an excluded slot group")
 
   UnitClassBase = function() return nil end
+end
+
+--------------------------------------------------------------------------
+-- Bind state does not affect classification (#25, confirmed live by #35)
+--------------------------------------------------------------------------
+
+do
+  -- Item bind state has no bearing on class/armor/weapon proficiency,
+  -- usability, or disenchant eligibility (#35's finding, live-confirmed
+  -- against C_Item.IsUsableItem's misleading result for unbound Warband
+  -- Bank items). Scanner records isBound purely for display; classification
+  -- must treat a freshly-unbound Warband Bank item exactly like an
+  -- already-bound one.
+  mockNoUpgradeTrack()
+  local bound = { quality = 4, hyperlink = "item:bound", classID = 4, subclassID = 1, isBound = true }
+  local unbound = { quality = 4, hyperlink = "item:unbound", classID = 4, subclassID = 1, isBound = false }
+
+  equals(ns.Classify:IsDisenchantCandidate(bound), ns.Classify:IsDisenchantCandidate(unbound),
+    "disenchant eligibility does not depend on whether the item is bound")
+  equals(ns.Classify:IsUsable(bound.hyperlink), ns.Classify:IsUsable(unbound.hyperlink),
+    "usability does not depend on whether the item is bound")
+
+  UnitClassBase = function() return "WARRIOR" end
+  equals(ns.Classify:IsClassProficient(bound), ns.Classify:IsClassProficient(unbound),
+    "class/armor proficiency does not depend on whether the item is bound")
+  UnitClassBase = function() return nil end
+
+  resetTooltipMock()
+end
+
+--------------------------------------------------------------------------
+-- UI.lua: Pull Selected edge cases (#25)
+--------------------------------------------------------------------------
+
+local function fakeRow(rowItem, checked)
+  return {
+    item = rowItem,
+    checkbox = {
+      checked = checked,
+      GetChecked = function(self) return self.checked end,
+      SetChecked = function(self, v) self.checked = v end,
+    },
+  }
+end
+
+-- PullSelected calls UI:Refresh() at the end, which needs the full panel
+-- (BuildFilters reads minLevelBox/maxLevelBox) that CreatePanel never runs
+-- in these tests - stubbed out since these tests are only about the pull
+-- loop's own counting/reporting, not the refreshed results list.
+ns.UI.Refresh = function() end
+
+do
+  -- Bag space can't free up mid-pull (#25): once one item fails with "bags
+  -- full", every other checked item is counted as not-pulled directly,
+  -- rather than repeating the identical failing bag scan for each in turn.
+  local calls = 0
+  ns.Scanner = {
+    WithdrawToBags = function(_, bagID)
+      calls = calls + 1
+      if bagID == 1 then return true end
+      return false, "bags full"
+    end,
+  }
+
+  ns.UI:SetRowsForTesting({
+    fakeRow({ bagID = 1, slot = 1, name = "Sword" }, true),
+    fakeRow({ bagID = 2, slot = 1, name = "Shield" }, true),
+    fakeRow({ bagID = 3, slot = 1, name = "Helm" }, true),
+    fakeRow({ bagID = 4, slot = 1, name = "Boots" }, false), -- unchecked: never attempted
+  })
+
+  local before = #printedMessages
+  ns.UI.PullSelected()
+  equals(calls, 2, "PullSelected stops calling WithdrawToBags after the first 'bags full' failure")
+  equals(printedMessages[before + 1], "Pulled 1 item(s). Stopped: bags are full (2 remaining).",
+    "PullSelected counts every remaining checked item as not-pulled, not just the one that failed")
+end
+
+do
+  -- A failure that isn't "cursor busy" (e.g. the bank closed mid-pull, #25)
+  -- must be reported as what it actually is, not a generic, misleading
+  -- "cursor was busy" message.
+  ns.Scanner = {
+    WithdrawToBags = function() return false, "item is no longer there" end,
+  }
+  ns.UI:SetRowsForTesting({ fakeRow({ bagID = 6, slot = 1, name = "Ring" }, true) })
+
+  local before = #printedMessages
+  ns.UI.PullSelected()
+  equals(printedMessages[before + 1], "Pulled 0 item(s), skipped 1 (item is no longer there).",
+    "PullSelected reports the actual skip reason instead of an assumed cursor-busy message")
 end
 
 --------------------------------------------------------------------------

@@ -149,6 +149,17 @@ function Scanner:WithdrawToBags(bagID, slot)
     return false, "cursor is already holding something"
   end
 
+  -- The results list is built from a scan that can be seconds old by the
+  -- time Pull Selected runs each row (#25): the item may have already been
+  -- moved, or the source slot may no longer be reachable at all (the bank
+  -- was closed, or the player disconnected mid-pull). Confirming the item
+  -- is still there before touching the cursor turns that into a clear,
+  -- reported skip instead of a pickup call that does nothing or leaves the
+  -- cursor holding nothing useful.
+  if not C_Container.GetContainerItemInfo(bagID, slot) then
+    return false, "item is no longer there"
+  end
+
   local emptyBag, emptySlot
   for _, id in ipairs(CHARACTER_BAG_IDS) do
     local numSlots = C_Container.GetContainerNumSlots(id) or 0

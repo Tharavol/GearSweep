@@ -290,7 +290,9 @@ end
 
 local function PullSelected()
   local moved, failed, skipped = 0, 0, 0
-  for _, row in ipairs(rows) do
+  local skipReason
+
+  for i, row in ipairs(rows) do
     if row.item and row.checkbox:GetChecked() then
       local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
       if ok then
@@ -298,10 +300,20 @@ local function PullSelected()
         ns.Debug("Pulled %s from %s (bag %d, slot %d)",
           row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
       elseif reason == "bags full" then
-        failed = failed + 1
-        ns.Debug("Could not pull %s: bags full", row.item.name or row.item.hyperlink)
+        -- Bag space can't free up mid-loop (#25): every remaining checked
+        -- item would fail exactly the same way, so they're counted as
+        -- not-pulled directly instead of repeating the same failing bag
+        -- scan for each one in turn.
+        for j = i, #rows do
+          if rows[j].item and rows[j].checkbox:GetChecked() then
+            failed = failed + 1
+          end
+        end
+        ns.Debug("Stopped: bags are full")
+        break
       else
         skipped = skipped + 1
+        skipReason = skipReason or reason
         ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
       end
     end
@@ -310,13 +322,19 @@ local function PullSelected()
   if failed > 0 then
     ns.Print("Pulled %d item(s). Stopped: bags are full (%d remaining).", moved, failed)
   elseif skipped > 0 then
-    ns.Print("Pulled %d item(s), skipped %d (cursor was busy - try again).", moved, skipped)
+    ns.Print("Pulled %d item(s), skipped %d (%s).", moved, skipped, skipReason or "unknown reason")
   else
     ns.Print("Pulled %d item(s).", moved)
   end
 
   UI:Refresh()
 end
+
+-- Exposed for the offline test suite (#25), which can't build a real rows
+-- list without the frame templates CreatePanel needs; production code never
+-- calls these itself.
+UI.PullSelected = PullSelected
+function UI:SetRowsForTesting(list) rows = list end
 
 -- Fixed row height every section below uses, so a section's total height
 -- is always (rows * ROW_STEP), computable up front instead of guessed.
