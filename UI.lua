@@ -288,46 +288,72 @@ local function SetAllChecked(checked)
   end
 end
 
+-- Withdrawals are issued one at a time, a tick apart, rather than back to
+-- back in a single synchronous loop (#41, confirmed live: a 2-item pull
+-- reported "Pulled 2 item(s)" but only 1 actually arrived). Scanner:With-
+-- drawToBags re-scans the character's bags fresh each call to find the
+-- next empty slot, but the client's own container state doesn't
+-- necessarily reflect a just-issued pickup/place pair by the very next
+-- line of Lua - the same reason other addons doing bulk container moves
+-- wait a beat (or for ITEM_LOCK_CHANGED) between them - so a second
+-- withdrawal issued immediately after the first could read a stale
+-- "empty slot" that collided with the first item's still-settling
+-- placement, silently failing while still counted as moved.
 local function PullSelected()
-  local moved, failed, skipped = 0, 0, 0
-  local skipReason
-
-  for i, row in ipairs(rows) do
+  local queue = {}
+  for _, row in ipairs(rows) do
     if row.item and row.checkbox:GetChecked() then
-      local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
-      if ok then
-        moved = moved + 1
-        ns.Debug("Pulled %s from %s (bag %d, slot %d)",
-          row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
-      elseif reason == "bags full" then
-        -- Bag space can't free up mid-loop (#25): every remaining checked
-        -- item would fail exactly the same way, so they're counted as
-        -- not-pulled directly instead of repeating the same failing bag
-        -- scan for each one in turn.
-        for j = i, #rows do
-          if rows[j].item and rows[j].checkbox:GetChecked() then
-            failed = failed + 1
-          end
-        end
-        ns.Debug("Stopped: bags are full")
-        break
-      else
-        skipped = skipped + 1
-        skipReason = skipReason or reason
-        ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
-      end
+      table.insert(queue, row)
     end
   end
 
-  if failed > 0 then
-    ns.Print("Pulled %d item(s). Stopped: bags are full (%d remaining).", moved, failed)
-  elseif skipped > 0 then
-    ns.Print("Pulled %d item(s), skipped %d (%s).", moved, skipped, skipReason or "unknown reason")
-  else
-    ns.Print("Pulled %d item(s).", moved)
+  local moved, failed, skipped = 0, 0, 0
+  local skipReason
+  local index = 0
+
+  local function Finish()
+    if failed > 0 then
+      ns.Print("Pulled %d item(s). Stopped: bags are full (%d remaining).", moved, failed)
+    elseif skipped > 0 then
+      ns.Print("Pulled %d item(s), skipped %d (%s).", moved, skipped, skipReason or "unknown reason")
+    else
+      ns.Print("Pulled %d item(s).", moved)
+    end
+    UI:Refresh()
   end
 
-  UI:Refresh()
+  local ProcessNext
+  ProcessNext = function()
+    index = index + 1
+    local row = queue[index]
+    if not row then
+      Finish()
+      return
+    end
+
+    local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
+    if ok then
+      moved = moved + 1
+      ns.Debug("Pulled %s from %s (bag %d, slot %d)",
+        row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
+    elseif reason == "bags full" then
+      -- Bag space can't free up mid-queue (#25): every remaining queued
+      -- item would fail exactly the same way, so they're counted as
+      -- not-pulled directly instead of repeating the same failing scan.
+      failed = failed + (#queue - index + 1)
+      ns.Debug("Stopped: bags are full")
+      Finish()
+      return
+    else
+      skipped = skipped + 1
+      skipReason = skipReason or reason
+      ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
+    end
+
+    C_Timer.After(0, ProcessNext)
+  end
+
+  ProcessNext()
 end
 
 -- Exposed for the offline test suite (#25), which can't build a real rows

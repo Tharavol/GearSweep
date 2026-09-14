@@ -1217,6 +1217,7 @@ do
 
   local before = #printedMessages
   ns.UI.PullSelected()
+  stubs.drainTimers()
   equals(calls, 2, "PullSelected stops calling WithdrawToBags after the first 'bags full' failure")
   equals(printedMessages[before + 1], "Pulled 1 item(s). Stopped: bags are full (2 remaining).",
     "PullSelected counts every remaining checked item as not-pulled, not just the one that failed")
@@ -1233,8 +1234,36 @@ do
 
   local before = #printedMessages
   ns.UI.PullSelected()
+  stubs.drainTimers()
   equals(printedMessages[before + 1], "Pulled 0 item(s), skipped 1 (item is no longer there).",
     "PullSelected reports the actual skip reason instead of an assumed cursor-busy message")
+end
+
+do
+  -- #41: confirmed live - pulling 2 items reported "Pulled 2 item(s)" but
+  -- only 1 actually arrived, because both withdrawals were issued back to
+  -- back in the same instant. Each withdrawal must now wait a tick (via
+  -- C_Timer.After) before the next one is issued, rather than firing them
+  -- all in one synchronous pass.
+  local callOrder = {}
+  ns.Scanner = {
+    WithdrawToBags = function(_, bagID)
+      table.insert(callOrder, bagID)
+      return true
+    end,
+  }
+  ns.UI:SetRowsForTesting({
+    fakeRow({ bagID = 1, slot = 1, name = "Sword" }, true),
+    fakeRow({ bagID = 2, slot = 1, name = "Shield" }, true),
+  })
+
+  local before = #printedMessages
+  ns.UI.PullSelected()
+  equals(#callOrder, 1, "PullSelected does not issue the second withdrawal in the same instant as the first")
+
+  stubs.drainTimers()
+  equals(#callOrder, 2, "PullSelected issues the second withdrawal once a tick has passed")
+  equals(printedMessages[before + 1], "Pulled 2 item(s).", "both items are counted once both withdrawals ran")
 end
 
 --------------------------------------------------------------------------

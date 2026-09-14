@@ -192,3 +192,16 @@ All notable changes to GearSweep are documented in this file.
   merely technically-equippable gear - checked separately from shield
   usability (Warrior/Paladin/Shaman only; Death Knight, also Plate,
   cannot use a shield).
+- Pulling multiple items reported more items pulled than actually arrived
+  (#41, confirmed live during the #24 manual QA pass: a 2-item pull said
+  "Pulled 2 item(s)" but only 1 showed up). `PullSelected` issued every
+  checked item's pickup/place pair back to back in one synchronous pass;
+  `Scanner:WithdrawToBags` re-scans bag contents fresh each call to find
+  the next empty slot, but the client's own container state doesn't
+  necessarily reflect a just-issued move by the very next line of Lua -
+  the same reason other addons doing bulk container moves wait a beat (or
+  for `ITEM_LOCK_CHANGED`) between them. A second withdrawal issued in the
+  same instant as the first could read a stale "empty slot" that collided
+  with the first item's still-settling placement, silently failing while
+  still counted as moved. Withdrawals are now issued one at a time, a
+  tick apart.
