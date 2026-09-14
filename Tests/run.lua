@@ -144,7 +144,7 @@ do
   ns.db.debug = true
   dispatch("debug yes")
   equals(ns.db.debug, true, "an invalid value leaves the setting unchanged")
-  equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', or 'upgrades'.",
+  equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', 'upgrades', or 'item <name>'.",
     "an invalid value is rejected with a specific error")
   ns.db.debug = false
 end
@@ -308,6 +308,30 @@ do
 
   dispatch("debug upgrades")
   check(upgradesCalled, "debug upgrades dispatches to Upgrade:DumpSelectedUpgrades")
+end
+
+do
+  -- #35: debug item <name> finds a matching item by case-insensitive
+  -- substring and dumps its tooltip data.
+  ns.Scanner = {
+    ScanAll = function()
+      return {
+        { name = "Bramblebarricade", hyperlink = "item:1", quality = 4,
+          equipLoc = "INVTYPE_SHIELD", source = "Account" },
+      }
+    end,
+  }
+  local dumpedLink
+  ns.Classify.DumpTooltip = function(_, link) dumpedLink = link end
+
+  dispatch("debug item bramble")
+  equals(dumpedLink, "item:1", "debug item finds a case-insensitive substring match and dumps its tooltip")
+
+  dumpedLink = nil
+  dispatch("debug item nonexistent")
+  check(dumpedLink == nil, "debug item reports nothing found rather than dumping a wrong item")
+  equals(printedMessages[1], "No item matching 'nonexistent' found in bags/bank.",
+    "debug item explains when no match is found")
 end
 
 --------------------------------------------------------------------------

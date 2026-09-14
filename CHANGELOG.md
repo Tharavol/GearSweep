@@ -45,6 +45,11 @@ All notable changes to GearSweep are documented in this file.
 - Results list rows now show the real item tooltip on hover - including
   Blizzard's automatic equipped-item comparison pane - exactly as if the
   item were being hovered directly in bags/bank (#33).
+- `/gs debug item <name>` (#35): finds an item in bags/bank by
+  case-insensitive substring and dumps its raw tooltip data (plain text
+  plus every structured C_TooltipInfo line's type/usable/leftText)
+  alongside IsUsable's verdict - for diagnosing class/armor/weapon
+  proficiency misses without guessing at tooltip structure again.
 
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by
@@ -77,3 +82,7 @@ All notable changes to GearSweep are documented in this file.
   expression in UI.lua's mode dispatch fell through to the disenchant gate
   whenever the upgrade gate returned false, the common case, instead of
   correctly excluding the item.
+- Collapsing a filter section overlapped the next section's header (#34):
+  RelayoutFrame only advanced past a section's own header row when
+  expanded (via the first checkbox row sharing it); collapsed sections
+  never accounted for that row on their own.

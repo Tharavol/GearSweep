@@ -104,6 +104,30 @@ function Classify:IsUsable(link)
   return true
 end
 
+-- #35 debug dump: raw tooltip data for one item (plain text plus every
+-- structured C_TooltipInfo line's type/usable/leftText), so a live report
+-- can show exactly what Blizzard's tooltip actually says about an item
+-- IsUsable got wrong, rather than guessing at tooltip structure again.
+function Classify:DumpTooltip(link)
+  ns.Print("Plain tooltip lines:")
+  for i, rawLine in ipairs(GetTooltipLines(link)) do
+    print(("  %d: %s"):format(i, CleanLine(rawLine)))
+  end
+
+  if C_TooltipInfo then
+    local data = C_TooltipInfo.GetHyperlink(link)
+    if data and data.lines then
+      print("Structured tooltip lines:")
+      for i, line in ipairs(data.lines) do
+        print(("  %d: type=%s usable=%s leftText=%s"):format(
+          i, tostring(line.type), tostring(line.usable), tostring(line.leftText)))
+      end
+    end
+  end
+
+  print(("IsUsable: %s"):format(tostring(self:IsUsable(link))))
+end
+
 -- Raw "Best in Slot" label lines (e.g. "Holy Paladin"), read off a
 -- background tooltip since this annotation isn't in the structured
 -- C_TooltipInfo data (#10). Empty when the item has no such annotation -

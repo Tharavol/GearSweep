@@ -44,6 +44,7 @@ local COMMANDS = {
       "|cffffff00/gs debug [on|off]|r - toggle or set diagnostic messages",
       "|cffffff00/gs debug slots|r - print current item level in every equipment slot",
       "|cffffff00/gs debug upgrades|r - print the items Upgrade mode currently selects",
+      "|cffffff00/gs debug item <name>|r - print an item's raw tooltip data by name",
     },
     handler = function(_, rest)
       if rest == "on" then
@@ -58,8 +59,25 @@ local COMMANDS = {
       elseif rest == "upgrades" then
         ns.Upgrade:DumpSelectedUpgrades()
         return
+      elseif rest:match("^item%s+%S") then
+        local query = rest:match("^item%s+(.+)$")
+        local found
+        for _, item in ipairs(ns.Scanner:ScanAll()) do
+          if item.name and item.name:lower():find(query, 1, true) then
+            found = item
+            break
+          end
+        end
+        if not found then
+          ns.Print("No item matching '%s' found in bags/bank.", query)
+        else
+          ns.Print("%s: ilvl %d, quality %d, %s, source %s", found.name,
+            found.itemLevel or 0, found.quality or -1, found.equipLoc or "?", found.source or "?")
+          ns.Classify:DumpTooltip(found.hyperlink)
+        end
+        return
       else
-        ns.Print("'%s' - expected 'on', 'off', 'slots', or 'upgrades'.", rest)
+        ns.Print("'%s' - expected 'on', 'off', 'slots', 'upgrades', or 'item <name>'.", rest)
         return
       end
       ns.Print("Debug messages are %s.", ns.db.debug and "|cff00ff00on|r" or "|cffff0000off|r")

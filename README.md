@@ -38,6 +38,7 @@ Under active development. See the [milestones](../../milestones) and
 | `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
 | `/gs debug slots` | Prints current item level in every equipment slot. |
 | `/gs debug upgrades` | Prints the items Upgrade mode currently selects, and the equipped item level each was compared against. |
+| `/gs debug item <name>` | Prints an item's raw tooltip data (by case-insensitive substring match). |
 | `/gs status` | Shows current settings. |
 | `/gs version` | Shows the addon version. |
 | `/gs reset` | Restores settings to defaults. |

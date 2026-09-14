@@ -524,11 +524,18 @@ end
 function UI:RelayoutFrame()
   local y = -32 - ROW_STEP - 10
 
+  -- A collapsed section still occupies its own header row - only the
+  -- checkbox rows below it disappear - so `y` always drops by at least
+  -- ROW_STEP here, via PositionXxxCheckboxes when expanded (its first row
+  -- shares the header's row) or explicitly when collapsed. Omitting the
+  -- explicit drop was why collapsing a section overlapped the next one.
   qualityHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   UpdateSectionHeaderText(qualityHeader)
   local qualityCollapsed = ns.db.uiCollapsed.quality
   for _, cb in pairs(qualityCheckboxes) do cb:SetShown(not qualityCollapsed) end
-  if not qualityCollapsed then
+  if qualityCollapsed then
+    y = y - ROW_STEP
+  else
     y = PositionQualityCheckboxes(PADDING + LABEL_COLUMN, y)
   end
   y = y - 10
@@ -537,7 +544,9 @@ function UI:RelayoutFrame()
   UpdateSectionHeaderText(slotHeader)
   local slotCollapsed = ns.db.uiCollapsed.slot
   for _, cb in pairs(slotCheckboxes) do cb:SetShown(not slotCollapsed) end
-  if not slotCollapsed then
+  if slotCollapsed then
+    y = y - ROW_STEP
+  else
     y = PositionSlotCheckboxes(PADDING + LABEL_COLUMN, y)
   end
   y = y - 10
@@ -552,7 +561,9 @@ function UI:RelayoutFrame()
     local seasonCollapsed = ns.db.uiCollapsed.season
     adventurerCheckbox:SetShown(not seasonCollapsed)
     previousSeasonCheckbox:SetShown(not seasonCollapsed)
-    if not seasonCollapsed then
+    if seasonCollapsed then
+      y = y - ROW_STEP
+    else
       adventurerCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
       y = y - ROW_STEP
       previousSeasonCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + LABEL_COLUMN, y)
