@@ -68,12 +68,21 @@ local COMMANDS = {
             break
           end
         end
-        if not found then
-          ns.Print("No item matching '%s' found in bags/bank.", query)
-        else
+        if found then
           ns.Print("%s: ilvl %d, quality %d, %s, source %s", found.name,
             found.itemLevel or 0, found.quality or -1, found.equipLoc or "?", found.source or "?")
           ns.Classify:DumpTooltip(found.hyperlink)
+          return
+        end
+
+        -- Not in bags/bank - try equipped slots (#35: comparing a
+        -- known-bound item's IsUsableItem result against unbound ones).
+        local equippedLink, slotName = ns.Upgrade:FindEquippedLink(query)
+        if equippedLink then
+          ns.Print("Equipped in %s.", slotName)
+          ns.Classify:DumpTooltip(equippedLink)
+        else
+          ns.Print("No item matching '%s' found in bags/bank or equipped.", query)
         end
         return
       else

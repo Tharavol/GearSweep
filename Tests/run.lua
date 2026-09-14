@@ -323,6 +323,7 @@ do
   }
   local dumpedLink
   ns.Classify.DumpTooltip = function(_, link) dumpedLink = link end
+  ns.Upgrade.FindEquippedLink = function() return nil end
 
   dispatch("debug item bramble")
   equals(dumpedLink, "item:1", "debug item finds a case-insensitive substring match and dumps its tooltip")
@@ -330,8 +331,12 @@ do
   dumpedLink = nil
   dispatch("debug item nonexistent")
   check(dumpedLink == nil, "debug item reports nothing found rather than dumping a wrong item")
-  equals(printedMessages[1], "No item matching 'nonexistent' found in bags/bank.",
+  equals(printedMessages[1], "No item matching 'nonexistent' found in bags/bank or equipped.",
     "debug item explains when no match is found")
+
+  ns.Upgrade.FindEquippedLink = function() return "item:equipped-1", "HeadSlot" end
+  dispatch("debug item nonexistent")
+  equals(dumpedLink, "item:equipped-1", "debug item falls back to searching equipped slots")
 end
 
 --------------------------------------------------------------------------

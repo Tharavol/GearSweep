@@ -156,6 +156,23 @@ function Upgrade:DumpSelectedUpgrades()
   end
 end
 
+-- #35 debug helper: finds an equipped item by case-insensitive substring,
+-- for comparing a known-bound/known-usable item's C_Item.IsUsableItem
+-- result against the false readings seen for unbound Warband Bank items.
+function Upgrade:FindEquippedLink(query)
+  for _, slotName in ipairs(ALL_INVENTORY_SLOTS) do
+    local slotID = GetInventorySlotInfo(slotName)
+    local link = slotID and GetInventoryItemLink("player", slotID)
+    if link then
+      local name = C_Item.GetItemInfo(link)
+      if name and name:lower():find(query, 1, true) then
+        return link, slotName
+      end
+    end
+  end
+  return nil
+end
+
 -- Whether the character can actually use the item (class/armor/weapon
 -- proficiency, level, etc.), whether it's relevant to the current spec -
 -- reusing Blizzard's own tooltip signals (#8/#15) rather than a hand-rolled
