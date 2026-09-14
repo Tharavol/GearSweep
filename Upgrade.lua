@@ -308,24 +308,22 @@ function Upgrade:SelectBest(candidates)
 
   local twoHandAverage = bestTwoHand and bestTwoHand.itemLevel or nil
 
+  -- Confirmed live via GetAverageItemLevel: Blizzard's own average item
+  -- level counts a two-hand weapon TWICE - once per weapon slot - so a
+  -- lone one-hand candidate with no off-hand really is only worth half
+  -- its own level in this comparison, not a direct match against a
+  -- two-hander. Swapping a 253 two-hander for a bare 253 one-hand weapon
+  -- dropped overall average item level by 17 (275.25 -> 259.50) even
+  -- though the weapon itself barely changed - the empty off-hand slot is
+  -- a real loss, not a wash, since it was effectively "filled" by the
+  -- two-hander's own value before. (A prior version of this compared a
+  -- lone main-hand candidate directly, reasoning the off-hand was empty
+  -- either way - that reasoning didn't hold once checked against real
+  -- data, so it was reverted.)
   local oneHandAverage
   if bestMainHand then
-    if bestOffHand then
-      oneHandAverage = (bestMainHand.itemLevel + bestOffHand.itemLevel) / 2
-    elseif equippedTwoHand then
-      -- No off-hand candidate, and the off-hand is already empty right
-      -- now (blocked by the equipped two-hander) - switching to this
-      -- main-hand item alone doesn't cost anything there, so compare it
-      -- directly instead of diluting it against a slot that was never
-      -- going to be filled either way (confirmed live: a 292 wand was
-      -- wrongly weighed against a 256 staff as if losing an off-hand
-      -- item it never had).
-      oneHandAverage = bestMainHand.itemLevel
-    else
-      -- Already one-hand/dual-wield: the off-hand keeps whatever's
-      -- currently equipped there if no better candidate was found for it.
-      oneHandAverage = (bestMainHand.itemLevel + equippedOffLevel) / 2
-    end
+    local offLevel = bestOffHand and bestOffHand.itemLevel or (not equippedTwoHand and equippedOffLevel or 0)
+    oneHandAverage = (bestMainHand.itemLevel + offLevel) / 2
   end
 
   local bestAverage, bestOption = currentAverage, "current"

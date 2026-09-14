@@ -137,11 +137,13 @@ All notable changes to GearSweep are documented in this file.
   candidate still can't be suggested alone while a two-hander is equipped
   and no one-hand candidate exists to pair it with - the slot is
   genuinely blocked in that case.
-- A lone main-hand candidate (e.g. a wand) with no off-hand candidate
-  found was averaged against an off-hand slot that was empty either way,
-  halving its effective value against the equipped two-hander (confirmed
-  live: a 292 wand lost to a 256 staff). Switching to it doesn't cost an
-  off-hand item that was never there, so this now compares directly.
+- Reverted the above: confirmed live via `GetAverageItemLevel` that
+  Blizzard's own average item level counts a two-hand weapon TWICE (once
+  per weapon slot) - swapping a 253 two-hander for a bare 253 one-hand
+  weapon dropped real overall average item level by 17, a genuine loss,
+  not a wash. A lone main-hand candidate with no off-hand is correctly
+  worth only half its own level in this comparison after all; it needs
+  to clear more than double the equipped two-hander's level to win.
 - Off-hand weapons (`INVTYPE_WEAPONOFFHAND`, for dual-wielders) were
   labeled "Weapon" in the results list, indistinguishable from a
   main-hand item at a glance (#38) - now grouped under "Off Hand" with
