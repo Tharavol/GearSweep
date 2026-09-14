@@ -6,6 +6,7 @@
 local stubs = {}
 
 local pendingTimers = {}
+local eventFrames = {}
 
 function stubs.install(env)
   env.wipe = function(t)
@@ -52,7 +53,7 @@ function stubs.install(env)
   -- through a second, parallel line-storage mechanism.
   env.UIParent = {}
   env.CreateFrame = function(_frameType, name)
-    local frame = { name = name }
+    local frame = { name = name, events = {} }
     function frame:GetName() return name end
     function frame:SetOwner() end
     function frame:SetHyperlink() end
@@ -63,6 +64,16 @@ function stubs.install(env)
       end
       return n
     end
+    -- Enough for Scanner.lua's transaction-confirmation watcher (#41):
+    -- a real event fires on the real registered frame(s); stubs.fireEvent
+    -- lets a test simulate that instead of the real game doing it.
+    function frame:RegisterEvent(event) self.events[event] = true end
+    function frame:UnregisterEvent(event) self.events[event] = nil end
+    function frame:UnregisterAllEvents() self.events = {} end
+    function frame:SetScript(script, handler)
+      if script == "OnEvent" then self.onEvent = handler end
+    end
+    table.insert(eventFrames, frame)
     return frame
   end
 
@@ -123,6 +134,28 @@ end
 
 function stubs.resetTimers()
   pendingTimers = {}
+end
+
+-- Dispatches `event` to every currently-registered frame's OnEvent handler,
+-- the same way the real client would. Targets are snapshotted first since a
+-- handler commonly unregisters itself (or creates a new watcher frame) as
+-- part of handling the event.
+function stubs.fireEvent(event, ...)
+  local targets = {}
+  for _, frame in ipairs(eventFrames) do
+    if frame.events[event] then
+      table.insert(targets, frame)
+    end
+  end
+  for _, frame in ipairs(targets) do
+    if frame.onEvent and frame.events[event] then
+      frame.onEvent(frame, event, ...)
+    end
+  end
+end
+
+function stubs.resetEventFrames()
+  eventFrames = {}
 end
 
 -- Loads an addon file the way WoW does, passing (addonName, privateTable) as

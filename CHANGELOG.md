@@ -216,3 +216,16 @@ All notable changes to GearSweep are documented in this file.
   holding something"). Added `/gs debug`-gated tracing through the pull
   sequence and each withdrawal's pickup/place steps to diagnose this
   further if it recurs.
+- The above still wasn't enough (#41): a live debug trace showed
+  `GetContainerItemInfo`/`CursorHasItem` reading pre-transaction state
+  immediately after `PickupContainerItem` returns - even a slot's own
+  "did picking it up empty it" check read stale - so both a synchronous
+  check and a 0-second timer read the same stale data and sent two
+  withdrawals to the identical destination slot. `Scanner:WithdrawToBags`
+  is now asynchronous: it calls back only once `ITEM_LOCK_CHANGED` fires
+  (the same signal other addons doing bulk container moves wait on, e.g.
+  Fence's batch auction module; confirmed against Blizzard's own
+  `ContainerFrame.lua`, which drives its own bag/bank display off the
+  same event), with a short timeout as a safety net so a pull can never
+  hang. `PullSelected` now waits for each withdrawal's callback before
+  starting the next one, instead of a fixed delay.

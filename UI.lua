@@ -288,17 +288,12 @@ local function SetAllChecked(checked)
   end
 end
 
--- Withdrawals are issued one at a time, a tick apart, rather than back to
--- back in a single synchronous loop (#41, confirmed live: a 2-item pull
--- reported "Pulled 2 item(s)" but only 1 actually arrived). Scanner:With-
--- drawToBags re-scans the character's bags fresh each call to find the
--- next empty slot, but the client's own container state doesn't
--- necessarily reflect a just-issued pickup/place pair by the very next
--- line of Lua - the same reason other addons doing bulk container moves
--- wait a beat (or for ITEM_LOCK_CHANGED) between them - so a second
--- withdrawal issued immediately after the first could read a stale
--- "empty slot" that collided with the first item's still-settling
--- placement, silently failing while still counted as moved.
+-- Withdrawals are issued one at a time, each waiting for the previous one
+-- to actually confirm (see Scanner:WithdrawToBags), rather than firing them
+-- all in a single synchronous loop (#41, confirmed live: a 2-item pull
+-- reported "Pulled 2 item(s)" but only 1 actually arrived, because the
+-- client's own container state doesn't reflect a just-issued pickup/place
+-- pair by the very next line of Lua).
 local function PullSelected()
   local queue = {}
   for _, row in ipairs(rows) do
@@ -333,26 +328,26 @@ local function PullSelected()
 
     ns.Debug("PullSelected: item %d/%d - %s (bag %d, slot %d)",
       index, #queue, row.item.name or row.item.hyperlink, row.item.bagID, row.item.slot)
-    local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
-    if ok then
-      moved = moved + 1
-      ns.Debug("Pulled %s from %s (bag %d, slot %d)",
-        row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
-    elseif reason == "bags full" then
-      -- Bag space can't free up mid-queue (#25): every remaining queued
-      -- item would fail exactly the same way, so they're counted as
-      -- not-pulled directly instead of repeating the same failing scan.
-      failed = failed + (#queue - index + 1)
-      ns.Debug("Stopped: bags are full")
-      Finish()
-      return
-    else
-      skipped = skipped + 1
-      skipReason = skipReason or reason
-      ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
-    end
-
-    C_Timer.After(0, ProcessNext)
+    ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot, function(ok, reason)
+      if ok then
+        moved = moved + 1
+        ns.Debug("Pulled %s from %s (bag %d, slot %d)",
+          row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
+        ProcessNext()
+      elseif reason == "bags full" then
+        -- Bag space can't free up mid-queue (#25): every remaining queued
+        -- item would fail exactly the same way, so they're counted as
+        -- not-pulled directly instead of repeating the same failing scan.
+        failed = failed + (#queue - index + 1)
+        ns.Debug("Stopped: bags are full")
+        Finish()
+      else
+        skipped = skipped + 1
+        skipReason = skipReason or reason
+        ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
+        ProcessNext()
+      end
+    end)
   end
 
   ProcessNext()

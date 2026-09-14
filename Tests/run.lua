@@ -347,13 +347,29 @@ do
   resetScannerMocks()
 end
 
+-- WithdrawToBags is asynchronous (#41): it calls back with the result
+-- rather than returning it directly, so a test captures the callback's
+-- arguments instead of a return value. The synchronous-refusal paths
+-- (cursor busy, item gone, bags full) call back immediately; the
+-- pickup/place path only calls back once ITEM_LOCK_CHANGED fires (or the
+-- safety-net timeout elapses) - see stubs.fireEvent/drainTimers below.
+local function callWithdraw(bagID, slot)
+  local result = {}
+  ns.Scanner:WithdrawToBags(bagID, slot, function(ok, reason)
+    result.called = true
+    result.ok = ok
+    result.reason = reason
+  end)
+  return result
+end
+
 do
   -- WithdrawToBags refuses to act while the cursor is already holding
   -- something, rather than dropping or swapping it unexpectedly.
   CursorHasItem = function() return true end
-  local ok, reason = ns.Scanner:WithdrawToBags(0, 1)
-  check(not ok, "WithdrawToBags refuses to run while the cursor holds an item")
-  equals(reason, "cursor is already holding something", "WithdrawToBags explains why it refused")
+  local result = callWithdraw(0, 1)
+  check(not result.ok, "WithdrawToBags refuses to run while the cursor holds an item")
+  equals(result.reason, "cursor is already holding something", "WithdrawToBags explains why it refused")
   CursorHasItem = function() return false end
 end
 
@@ -367,9 +383,9 @@ do
     [4] = { [1] = { hyperlink = "item:e" } },
     [6] = { [1] = { hyperlink = "item:bank" } },
   })
-  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
-  check(not ok, "WithdrawToBags refuses to run when every bag slot is full")
-  equals(reason, "bags full", "WithdrawToBags explains why it refused")
+  local result = callWithdraw(6, 1)
+  check(not result.ok, "WithdrawToBags refuses to run when every bag slot is full")
+  equals(result.reason, "bags full", "WithdrawToBags explains why it refused")
 
   resetScannerMocks()
 end
@@ -380,13 +396,13 @@ do
   -- already moved some other way (#25). WithdrawToBags must say so rather
   -- than silently touching the cursor for nothing.
   mockContainers({ [0] = { [1] = { hyperlink = "item:a" } } })
-  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
-  check(not ok, "WithdrawToBags refuses to run when the source slot is empty")
-  equals(reason, "item is no longer there", "WithdrawToBags explains why it refused")
+  local result = callWithdraw(6, 1)
+  check(not result.ok, "WithdrawToBags refuses to run when the source slot is empty")
+  equals(result.reason, "item is no longer there", "WithdrawToBags explains why it refused")
 
   local pickups = 0
   C_Container.PickupContainerItem = function() pickups = pickups + 1 end
-  ns.Scanner:WithdrawToBags(6, 1)
+  callWithdraw(6, 1)
   equals(pickups, 0, "WithdrawToBags never touches the cursor when the source slot is already empty")
   C_Container.PickupContainerItem = function() end
 
@@ -395,7 +411,8 @@ end
 
 do
   -- Success: picks up the source slot, then places it in the first empty
-  -- bag slot found (bag 0 has an empty slot 2; slot 1 is occupied).
+  -- bag slot found (bag 0 has an empty slot 2; slot 1 is occupied). The
+  -- move is only confirmed once ITEM_LOCK_CHANGED fires (#41).
   mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
   C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
 
@@ -404,8 +421,11 @@ do
     table.insert(pickups, { bagID = bagID, slot = slot })
   end
 
-  local ok = ns.Scanner:WithdrawToBags(6, 3)
-  check(ok, "WithdrawToBags succeeds when an empty bag slot exists")
+  local result = callWithdraw(6, 3)
+  check(not result.called, "WithdrawToBags does not call back until the move is confirmed")
+
+  stubs.fireEvent("ITEM_LOCK_CHANGED")
+  check(result.ok, "WithdrawToBags succeeds once ITEM_LOCK_CHANGED confirms the move")
   equals(#pickups, 2, "WithdrawToBags picks up the source item, then the empty destination slot")
   equals(pickups[1].bagID, 6, "the first pickup is the source bag")
   equals(pickups[1].slot, 3, "the first pickup is the source slot")
@@ -417,10 +437,24 @@ do
 end
 
 do
-  -- #41: if the destination slot wasn't actually empty by the time the
-  -- placement landed, the cursor is left still holding the item - this
-  -- must be reported as a failure and the item put back, not silently
-  -- counted as a successful move.
+  -- If ITEM_LOCK_CHANGED never fires for some edge case, the safety-net
+  -- timeout still resolves the withdrawal instead of hanging forever.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local result = callWithdraw(6, 3)
+  stubs.drainTimers()
+  check(result.ok, "WithdrawToBags's safety-net timeout resolves the withdrawal without a lock-change event")
+
+  resetScannerMocks()
+  C_Container.PickupContainerItem = function() end
+end
+
+do
+  -- #41: if the destination slot wasn't actually empty once the move
+  -- settled, the cursor is left still holding the item - this must be
+  -- reported as a failure and the item put back, not silently counted as
+  -- a successful move.
   mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [1] = { hyperlink = "item:bank" } } })
   C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
 
@@ -430,11 +464,12 @@ do
     pickupCount = pickupCount + 1
     table.insert(pickups, { bagID = bagID, slot = slot })
   end
-  CursorHasItem = function() return pickupCount == 2 end
+  CursorHasItem = function() return pickupCount >= 2 end -- false at entry, still holding once settled
 
-  local ok, reason = ns.Scanner:WithdrawToBags(6, 1)
-  check(not ok, "WithdrawToBags reports failure when the cursor is still holding the item after placement")
-  equals(reason, "failed to place item", "WithdrawToBags explains why it failed")
+  local result = callWithdraw(6, 1)
+  stubs.fireEvent("ITEM_LOCK_CHANGED")
+  check(not result.ok, "WithdrawToBags reports failure when the cursor is still holding the item once settled")
+  equals(result.reason, "failed to place item", "WithdrawToBags explains why it failed")
   equals(#pickups, 3, "WithdrawToBags puts the item back rather than leaving the cursor stuck")
   equals(pickups[3].bagID, 6, "the recovery pickup targets the original source bag")
   equals(pickups[3].slot, 1, "the recovery pickup targets the original source slot")
@@ -1227,12 +1262,13 @@ do
   -- Bag space can't free up mid-pull (#25): once one item fails with "bags
   -- full", every other checked item is counted as not-pulled directly,
   -- rather than repeating the identical failing bag scan for each in turn.
+  -- WithdrawToBags is asynchronous (#41); this mock resolves synchronously
+  -- since the sequencing itself is exercised separately below.
   local calls = 0
   ns.Scanner = {
-    WithdrawToBags = function(_, bagID)
+    WithdrawToBags = function(_, bagID, _, callback)
       calls = calls + 1
-      if bagID == 1 then return true end
-      return false, "bags full"
+      if bagID == 1 then callback(true) else callback(false, "bags full") end
     end,
   }
 
@@ -1245,7 +1281,6 @@ do
 
   local before = #printedMessages
   ns.UI.PullSelected()
-  stubs.drainTimers()
   equals(calls, 2, "PullSelected stops calling WithdrawToBags after the first 'bags full' failure")
   equals(printedMessages[before + 1], "Pulled 1 item(s). Stopped: bags are full (2 remaining).",
     "PullSelected counts every remaining checked item as not-pulled, not just the one that failed")
@@ -1256,13 +1291,12 @@ do
   -- must be reported as what it actually is, not a generic, misleading
   -- "cursor was busy" message.
   ns.Scanner = {
-    WithdrawToBags = function() return false, "item is no longer there" end,
+    WithdrawToBags = function(_, _, _, callback) callback(false, "item is no longer there") end,
   }
   ns.UI:SetRowsForTesting({ fakeRow({ bagID = 6, slot = 1, name = "Ring" }, true) })
 
   local before = #printedMessages
   ns.UI.PullSelected()
-  stubs.drainTimers()
   equals(printedMessages[before + 1], "Pulled 0 item(s), skipped 1 (item is no longer there).",
     "PullSelected reports the actual skip reason instead of an assumed cursor-busy message")
 end
@@ -1270,14 +1304,14 @@ end
 do
   -- #41: confirmed live - pulling 2 items reported "Pulled 2 item(s)" but
   -- only 1 actually arrived, because both withdrawals were issued back to
-  -- back in the same instant. Each withdrawal must now wait a tick (via
-  -- C_Timer.After) before the next one is issued, rather than firing them
-  -- all in one synchronous pass.
-  local callOrder = {}
+  -- back in the same instant. PullSelected must not start the second
+  -- withdrawal until the first one's callback actually resolves - this
+  -- mock only resolves when the test tells it to, so the test can prove
+  -- PullSelected is genuinely waiting rather than assuming completion.
+  local pending = {}
   ns.Scanner = {
-    WithdrawToBags = function(_, bagID)
-      table.insert(callOrder, bagID)
-      return true
+    WithdrawToBags = function(_, bagID, _, callback)
+      table.insert(pending, { bagID = bagID, callback = callback })
     end,
   }
   ns.UI:SetRowsForTesting({
@@ -1287,11 +1321,13 @@ do
 
   local before = #printedMessages
   ns.UI.PullSelected()
-  equals(#callOrder, 1, "PullSelected does not issue the second withdrawal in the same instant as the first")
+  equals(#pending, 1, "PullSelected does not issue the second withdrawal before the first one resolves")
 
-  stubs.drainTimers()
-  equals(#callOrder, 2, "PullSelected issues the second withdrawal once a tick has passed")
-  equals(printedMessages[before + 1], "Pulled 2 item(s).", "both items are counted once both withdrawals ran")
+  pending[1].callback(true)
+  equals(#pending, 2, "PullSelected issues the second withdrawal once the first one resolves")
+
+  pending[2].callback(true)
+  equals(printedMessages[before + 1], "Pulled 2 item(s).", "both items are counted once both withdrawals resolved")
 end
 
 --------------------------------------------------------------------------

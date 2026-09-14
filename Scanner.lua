@@ -139,14 +139,25 @@ end
 -- Moves one item from a bag/bank slot into the first empty bag slot, using
 -- the classic pickup-cursor/place-cursor pattern (#7): the same mechanism
 -- works uniformly across bags, bank, and Warband Bank tabs, since bank tabs
--- are ordinary bag indices (see #8's findings). Live functional smoke-test
--- (round-tripping a slot with itself) confirmed the pickup/place mechanics;
--- full behavior under a real cross-location move still gets exercised for
--- real once the Pull button (#14/#18) is built.
--- Returns true on success, or false plus a reason string.
-function Scanner:WithdrawToBags(bagID, slot)
+-- are ordinary bag indices (see #8's findings).
+--
+-- Asynchronous (#41, confirmed live via debug trace): CursorHasItem and
+-- GetContainerItemInfo both still read pre-transaction state immediately
+-- after the PickupContainerItem calls return - even a slot's own "did the
+-- pickup empty it" check read stale - so a synchronous return right after
+-- issuing them let a second withdrawal, issued as soon as the first
+-- returned, compute an empty-slot scan against data that hadn't caught up
+-- yet, sending both items to the same slot. Waiting for ITEM_LOCK_CHANGED
+-- (the same signal other addons doing bulk container moves wait on, e.g.
+-- Fence's batch auction module) before trusting these reads again is the
+-- actual fix; a short timeout is a safety net in case that event doesn't
+-- fire for some edge case, so a pull can never hang indefinitely.
+--
+-- Calls callback(true) on success, or callback(false, reason) on failure.
+function Scanner:WithdrawToBags(bagID, slot, callback)
   if CursorHasItem() then
-    return false, "cursor is already holding something"
+    callback(false, "cursor is already holding something")
+    return
   end
 
   -- The results list is built from a scan that can be seconds old by the
@@ -157,7 +168,8 @@ function Scanner:WithdrawToBags(bagID, slot)
   -- reported skip instead of a pickup call that does nothing or leaves the
   -- cursor holding nothing useful.
   if not C_Container.GetContainerItemInfo(bagID, slot) then
-    return false, "item is no longer there"
+    callback(false, "item is no longer there")
+    return
   end
 
   local emptyBag, emptySlot
@@ -173,30 +185,41 @@ function Scanner:WithdrawToBags(bagID, slot)
   end
 
   if not emptyBag then
-    return false, "bags full"
+    callback(false, "bags full")
+    return
   end
 
-  ns.Debug("WithdrawToBags: bag %d slot %d -> bag %d slot %d (cursor busy beforehand: %s)",
-    bagID, slot, emptyBag, emptySlot, tostring(CursorHasItem()))
-
+  ns.Debug("WithdrawToBags: bag %d slot %d -> bag %d slot %d", bagID, slot, emptyBag, emptySlot)
   C_Container.PickupContainerItem(bagID, slot)
-  ns.Debug("WithdrawToBags: after pickup - cursor holding: %s, source slot still occupied: %s",
-    tostring(CursorHasItem()), tostring(C_Container.GetContainerItemInfo(bagID, slot) ~= nil))
-
   C_Container.PickupContainerItem(emptyBag, emptySlot)
-  local stillHolding = CursorHasItem()
-  ns.Debug("WithdrawToBags: after place - cursor still holding: %s, destination now occupied: %s",
-    tostring(stillHolding), tostring(C_Container.GetContainerItemInfo(emptyBag, emptySlot) ~= nil))
 
-  if stillHolding then
-    -- The destination slot wasn't actually empty by the time the placement
-    -- landed (#41) - put the item back where it came from rather than
-    -- leaving the cursor stuck holding it, which would also cascade into
-    -- every subsequent withdrawal in the same pull failing with "cursor is
-    -- already holding something".
-    C_Container.PickupContainerItem(bagID, slot)
-    return false, "failed to place item"
+  local watcher = CreateFrame("Frame")
+  local settled = false
+
+  local function Settle()
+    if settled then return end
+    settled = true
+    watcher:UnregisterAllEvents()
+    watcher:SetScript("OnEvent", nil)
+
+    local stillHolding = CursorHasItem()
+    ns.Debug("WithdrawToBags: settled - cursor still holding: %s, destination occupied: %s",
+      tostring(stillHolding), tostring(C_Container.GetContainerItemInfo(emptyBag, emptySlot) ~= nil))
+
+    if stillHolding then
+      -- The destination slot wasn't actually empty once the transaction
+      -- settled - put the item back rather than leave the cursor stuck
+      -- holding it, which would otherwise cascade into every later
+      -- withdrawal in the same pull failing with "cursor is already
+      -- holding something".
+      C_Container.PickupContainerItem(bagID, slot)
+      callback(false, "failed to place item")
+    else
+      callback(true)
+    end
   end
 
-  return true
+  watcher:RegisterEvent("ITEM_LOCK_CHANGED")
+  watcher:SetScript("OnEvent", Settle)
+  C_Timer.After(1, Settle)
 end
