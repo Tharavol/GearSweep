@@ -32,10 +32,11 @@ end)
 -- Confirmed live (#6): opening the bank fires BANKFRAME_OPENED regardless
 -- of whether the player lands on the character bank or Warband Bank tab -
 -- switching tabs within an already-open bank frame does not re-fire it.
--- Real UI wiring (auto-open, gated by an options toggle) lands in #19;
--- this just confirms the hook works.
 local bankFrame = CreateFrame("Frame")
 bankFrame:RegisterEvent("BANKFRAME_OPENED")
 bankFrame:SetScript("OnEvent", function()
   ns.Debug("Bank opened")
+  if ns.db.autoOpen then
+    ns.UI:Show()
+  end
 end)

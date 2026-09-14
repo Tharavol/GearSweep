@@ -96,8 +96,9 @@ end
 -- classify season/tier/spec-relevance - see Classify.lua.
 function Scanner:ScanAll()
   local items = {}
+  local locations = self:GetLocations()
 
-  for _, location in ipairs(self:GetLocations()) do
+  for _, location in ipairs(locations) do
     local bagID = location.bagID
     local numSlots = C_Container.GetContainerNumSlots(bagID) or 0
 
@@ -131,6 +132,7 @@ function Scanner:ScanAll()
     end
   end
 
+  ns.Debug("Scanned %d location(s), found %d equippable item(s)", #locations, #items)
   return items
 end
 

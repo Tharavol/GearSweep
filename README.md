@@ -18,23 +18,27 @@ Under active development. See the [milestones](../../milestones) and
   "Pull Selected" moves every checked item into your bags - GearSweep never
   disenchants anything on its own.
 - **Upgrade mode**: switch the sweep window to Upgrade to filter your bags
-  and bank for equipment your character can actually use - matching
-  Blizzard's own class/armor/weapon proficiency and "Best in Slot"
-  spec-relevance signals - that's also a higher item level than what's
-  currently equipped in that slot, then pre-checks the single highest item
+  and bank for equipment your character can actually use - checked against
+  class/armor/weapon proficiency and Blizzard's own "Best in Slot"
+  spec-relevance signal - that's also a higher item level than what's
+  currently equipped in that slot (or your average equipped item level, for
+  a slot that's never been filled), then pre-checks the single highest item
   level candidate per slot (rings and trinkets: top two, since both are
   dual-slot; two-hand weapons and one-hand+offhand pairs never both get
-  pre-checked). Uncheck a pre-selected pick or check a runner-up before
-  pulling.
-- Auto-open on visiting the Warband Bank: not yet implemented (see the
-  [v0.5.0 milestone](../../milestone/5)).
+  pre-checked, and off-hand items are never suggested while a two-hand
+  weapon is equipped). Uncheck a pre-selected pick or check a runner-up
+  before pulling.
+- **Auto-open**: opens the sweep window automatically when you visit your
+  bank or Warband Bank. On by default; turn it off in the settings panel
+  or with `/gs autoopen off`.
 
 ## Slash Commands
 
 | Command | Description |
 |---|---|
-| `/gearsweep` or `/gs` | Opens the disenchant sweep window. |
+| `/gearsweep` or `/gs` | Opens the sweep window. |
 | `/gs options` | Opens the settings panel (also: `config`, `gui`). |
+| `/gs autoopen [on\|off]` | Toggles or sets auto-open on visiting the bank. |
 | `/gs debug [on\|off]` | Toggles or sets diagnostic messages. |
 | `/gs debug slots` | Prints current item level in every equipment slot. |
 | `/gs debug upgrades` | Prints the items Upgrade mode currently selects, and the equipped item level each was compared against. |
@@ -52,12 +56,17 @@ Adventurer-tier/previous-season toggles only apply to Disenchant. Click a
 filter section's header to collapse or expand it and free up room for the
 results list; collapsed state persists per section. All filter values
 persist between sessions, independently per mode. Hover a result row for
-the item's real tooltip, including the equipped-item comparison pane. The
-settings panel (`/gs options`, or the standard WoW AddOns options menu)
-currently only has diagnostic logging; an auto-open toggle lands with
-[v0.5.0](../../milestone/5).
+the item's real tooltip, including the equipped-item comparison pane.
+
+The settings panel (`/gs options`, or the standard WoW AddOns options menu)
+holds the two toggles that don't belong to either mode: auto-open on
+visiting the bank, and diagnostic (debug) logging. With debug logging on,
+scanning, classification results, and pull actions print extra detail to
+help track down a wrong classification without needing to reproduce it from
+scratch.
 
 ## License
 
-MIT - see [LICENSE](LICENSE). See [ATTRIBUTION.md](ATTRIBUTION.md) for a
-third-party data source cross-referenced (not vendored) in Classify.lua.
+GPL-3.0-or-later - see [LICENSE](LICENSE). See
+[ATTRIBUTION.md](ATTRIBUTION.md) for a third-party data source
+cross-referenced (not vendored) in Classify.lua.

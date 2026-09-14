@@ -25,6 +25,11 @@ end
 
 ns.DEFAULT_SETTINGS = {
   debug = false,
+  -- Whether opening the bank/Warband Bank also opens the sweep window
+  -- (#19). Defaults on since that's the addon's whole reason to exist -
+  -- players who don't want it can turn it off in Options or via
+  -- `/gs autoopen off`.
+  autoOpen = true,
   -- Per-section collapse state for the sweep window's filter sections
   -- (#32): all expanded by default, matching prior versions' fixed layout.
   uiCollapsed = {

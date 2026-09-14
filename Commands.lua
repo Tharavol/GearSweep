@@ -93,11 +93,30 @@ local COMMANDS = {
     end,
   },
   {
+    name = "autoopen",
+    help = { "|cffffff00/gs autoopen [on|off]|r - toggle or set auto-open on visiting the bank" },
+    handler = function(_, rest)
+      if rest == "on" then
+        ns.db.autoOpen = true
+      elseif rest == "off" then
+        ns.db.autoOpen = false
+      elseif rest == "" then
+        ns.db.autoOpen = not ns.db.autoOpen
+      else
+        ns.Print("'%s' - expected 'on' or 'off'.", rest)
+        return
+      end
+      ns.Print("Auto-open on visiting the bank is %s.",
+        ns.db.autoOpen and "|cff00ff00on|r" or "|cffff0000off|r")
+    end,
+  },
+  {
     name = "status",
     help = { "|cffffff00/gs status|r - show current settings" },
     handler = function()
       ns.Print("%s settings:", ns.VERSION)
       print(("  Debug messages: %s"):format(ns.db.debug and "|cff00ff00on|r" or "|cffff0000off|r"))
+      print(("  Auto-open on bank: %s"):format(ns.db.autoOpen and "|cff00ff00on|r" or "|cffff0000off|r"))
     end,
   },
   {

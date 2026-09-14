@@ -53,6 +53,7 @@ ns.DeepCopy = deepCopy
 
 ns.DEFAULT_SETTINGS = {
   debug = false,
+  autoOpen = true,
   disenchant = { excludedQualities = {}, includeAdventurerTier = true },
 }
 ns.db = deepCopy(ns.DEFAULT_SETTINGS)
@@ -147,6 +148,29 @@ do
   equals(printedMessages[1], "'yes' - expected 'on', 'off', 'slots', 'upgrades', or 'item <name>'.",
     "an invalid value is rejected with a specific error")
   ns.db.debug = false
+end
+
+do
+  dispatch("autoopen on")
+  equals(ns.db.autoOpen, true, "autoopen on enables auto-open")
+  dispatch("autoopen off")
+  equals(ns.db.autoOpen, false, "autoopen off disables auto-open")
+end
+
+do
+  ns.db.autoOpen = false
+  dispatch("autoopen")
+  equals(ns.db.autoOpen, true, "bare autoopen toggles the current state")
+  dispatch("autoopen")
+  equals(ns.db.autoOpen, false, "bare autoopen toggles back")
+end
+
+do
+  ns.db.autoOpen = true
+  dispatch("autoopen yes")
+  equals(ns.db.autoOpen, true, "an invalid value leaves autoopen unchanged")
+  equals(printedMessages[1], "'yes' - expected 'on' or 'off'.",
+    "an invalid autoopen value is rejected with a specific error")
 end
 
 do

@@ -4,7 +4,7 @@
 ## Author: Tharavol, Claude
 ## Version: @project-version@
 ## IconTexture: Interface\Icons\ability_racial_skeletonpinkie
-## X-License: MIT
+## X-License: GPL-3.0-or-later
 ## SavedVariables: GearSweepDB
 
 ## X-ReleaseNotes: Early development scaffolding - no player-facing features yet. See https://github.com/Tharavol/GearSweep for the current plan.

@@ -52,6 +52,19 @@ All notable changes to GearSweep are documented in this file.
   plus every structured C_TooltipInfo line's type/usable/leftText)
   alongside IsUsable's verdict - for diagnosing class/armor/weapon
   proficiency misses without guessing at tooltip structure again.
+- Auto-open on visiting the bank/Warband Bank (#19), on by default:
+  toggle it in the settings panel or with `/gs autoopen [on|off]`.
+- The settings panel now also holds the auto-open toggle (#20); filter
+  values themselves stay entirely in the sweep window, persisted per mode.
+- Debug logging pass (#21): scanning, per-mode classification results, and
+  pull actions now print debug-gated detail (item counts, what got pulled
+  or skipped and why) to help diagnose a wrong result without needing a
+  fresh repro.
+
+### Changed
+- Relicensed from MIT to GPL-3.0-or-later (#27), matching Crosshairs among
+  other Tharavol addons. `LICENSE`, the `.toc`'s `X-License`, and the
+  README's License section were updated together.
 
 ### Fixed
 - A default-settings merge/reset that assigned a nested settings table by

@@ -3,9 +3,10 @@ local ADDON_NAME, ns = ...
 --------------------------------------------------------------------------
 -- Options panel
 --
--- Skeleton only: a debug-logging toggle against ns.db.debug. Real filter
--- defaults and the auto-open toggle land in #20 (v0.5.0), once disenchant
--- and upgrade mode (#11-#18) exist to have defaults for.
+-- Filter defaults/values live entirely in the sweep window itself (#12,
+-- #17) - persisted per mode in ns.db.disenchant/ns.db.upgrade already, so
+-- there's nothing to duplicate here. This panel just holds the toggles
+-- that don't belong to any one mode: auto-open and debug logging (#20).
 --------------------------------------------------------------------------
 
 local Options = {}
@@ -19,8 +20,18 @@ local function CreatePanel()
   title:SetPoint("TOPLEFT", 16, -16)
   title:SetText(ADDON_NAME)
 
+  local autoOpenCheckbox = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
+  autoOpenCheckbox:SetPoint("TOPLEFT", title, "BOTTOMLEFT", -2, -12)
+  autoOpenCheckbox.Text:SetText("Open automatically when visiting the bank")
+  autoOpenCheckbox.tooltipText = "Open automatically when visiting the bank"
+  autoOpenCheckbox.tooltipRequirement =
+    "Opens the sweep window whenever you open your bank or Warband Bank."
+  autoOpenCheckbox:SetScript("OnClick", function(self)
+    ns.db.autoOpen = self:GetChecked() and true or false
+  end)
+
   local debugCheckbox = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
-  debugCheckbox:SetPoint("TOPLEFT", title, "BOTTOMLEFT", -2, -12)
+  debugCheckbox:SetPoint("TOPLEFT", autoOpenCheckbox, "BOTTOMLEFT", 0, -8)
   debugCheckbox.Text:SetText("Show diagnostic messages")
   debugCheckbox.tooltipText = "Show diagnostic messages"
   debugCheckbox.tooltipRequirement = "Print debug output while scanning and classifying items."
@@ -29,6 +40,7 @@ local function CreatePanel()
   end)
 
   panel:SetScript("OnShow", function()
+    autoOpenCheckbox:SetChecked(ns.db.autoOpen and true or false)
     debugCheckbox:SetChecked(ns.db.debug and true or false)
   end)
 

@@ -226,9 +226,13 @@ function UI:Refresh()
   local preChecked
   if currentMode == "upgrade" then
     preChecked = {}
-    for _, item in ipairs(ns.Upgrade:SelectBest(matching)) do
+    local best = ns.Upgrade:SelectBest(matching)
+    for _, item in ipairs(best) do
       preChecked[item] = true
     end
+    ns.Debug("Upgrade mode: %d candidate(s), %d pre-checked", #matching, #best)
+  else
+    ns.Debug("Disenchant mode: %d matching item(s)", #matching)
   end
 
   for _, item in ipairs(matching) do
@@ -278,10 +282,14 @@ local function PullSelected()
       local ok, reason = ns.Scanner:WithdrawToBags(row.item.bagID, row.item.slot)
       if ok then
         moved = moved + 1
+        ns.Debug("Pulled %s from %s (bag %d, slot %d)",
+          row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
       elseif reason == "bags full" then
         failed = failed + 1
+        ns.Debug("Could not pull %s: bags full", row.item.name or row.item.hyperlink)
       else
         skipped = skipped + 1
+        ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
       end
     end
   end
