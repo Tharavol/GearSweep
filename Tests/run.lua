@@ -178,8 +178,48 @@ end
 -- Upgrade best-per-slot selection (v0.4.0, #16)
 --------------------------------------------------------------------------
 
-ns.Classify = {}
+stubs.loadModule(here .. "/../Classify.lua", "GearSweep", ns)
 stubs.loadModule(here .. "/../Upgrade.lua", "GearSweep", ns)
+
+--------------------------------------------------------------------------
+-- Class armor/weapon proficiency (v0.4.0, #35)
+--------------------------------------------------------------------------
+
+local function classifiedItem(classID, subclassID, equipLoc)
+  return { classID = classID, subclassID = subclassID, equipLoc = equipLoc }
+end
+
+do
+  UnitClassBase = function() return "MAGE" end
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 6, "INVTYPE_SHIELD")),
+    "a Mage cannot equip a shield")
+  check(not ns.Classify:IsClassProficient(classifiedItem(4, 4, "INVTYPE_CHEST")),
+    "a Mage cannot equip plate armor")
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 1, "INVTYPE_CHEST")),
+    "a Mage can equip cloth armor")
+  check(ns.Classify:IsClassProficient(classifiedItem(2, 19, "INVTYPE_WEAPON")),
+    "a Mage can equip a wand")
+  check(not ns.Classify:IsClassProficient(classifiedItem(2, 1, "INVTYPE_2HWEAPON")),
+    "a Mage cannot equip a two-hand axe")
+  check(not ns.Classify:IsClassProficient(classifiedItem(2, 19, "INVTYPE_WEAPONOFFHAND")),
+    "a Mage cannot dual-wield, so an off-hand weapon is unusable regardless of its own subclass")
+end
+
+do
+  UnitClassBase = function() return "WARRIOR" end
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 4, "INVTYPE_CHEST")),
+    "a Warrior can equip plate armor")
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 6, "INVTYPE_SHIELD")),
+    "a Warrior can equip a shield")
+  check(not ns.Classify:IsClassProficient(classifiedItem(2, 19, "INVTYPE_WEAPON")),
+    "a Warrior cannot equip a wand")
+end
+
+do
+  UnitClassBase = function() return nil end
+  check(ns.Classify:IsClassProficient(classifiedItem(4, 6, "INVTYPE_SHIELD")),
+    "an unrecognised class defaults to usable rather than hiding everything")
+end
 
 local function item(equipLoc, itemLevel)
   return { equipLoc = equipLoc, itemLevel = itemLevel }

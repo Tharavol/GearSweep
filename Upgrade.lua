@@ -173,12 +173,17 @@ function Upgrade:FindEquippedLink(query)
   return nil
 end
 
--- Whether the character can actually use the item (class/armor/weapon
--- proficiency, level, etc.), whether it's relevant to the current spec -
--- reusing Blizzard's own tooltip signals (#8/#15) rather than a hand-rolled
--- proficiency table - and whether it's actually better than what's equipped.
+-- Whether the character can actually use the item: class/armor/weapon
+-- proficiency (#35 - a hand-maintained table, since no live signal covers
+-- this for Warband Bank items), the tooltip's own requirement-line
+-- "usable" flag (level/reputation/quest gates, #8/#15), whether it's
+-- relevant to the current spec, and whether it's actually better than
+-- what's equipped.
 function Upgrade:IsCandidate(item)
   if not RELEVANT_QUALITIES[item.quality] then
+    return false
+  end
+  if not ns.Classify:IsClassProficient(item) then
     return false
   end
   if not ns.Classify:IsUsable(item.hyperlink) then

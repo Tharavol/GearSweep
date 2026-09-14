@@ -91,6 +91,12 @@ All notable changes to GearSweep are documented in this file.
   a plain cloth chest piece the same Mage can obviously wear, as long as
   the item is still Warband-Bank-sourced ("Binds to Warband until
   equipped") - it isn't a proficiency signal for these items at all,
-  likely some ownership/binding gate instead. #35 remains open: neither
-  the tooltip nor IsUsableItem carries a usable proficiency signal for
-  Warband Bank items.
+  likely some ownership/binding gate instead. Further confirmed live that
+  IsUsableItem returns usable=false even for the player's own equipped
+  gear, ruling it out as a signal entirely.
+- Upgrade mode suggesting class-inappropriate items (#35, e.g. a shield
+  for a Mage): since neither the tooltip nor `C_Item.IsUsableItem`
+  exposes class/armor/weapon proficiency for any equipment tested live,
+  added a small hand-maintained proficiency table (data cross-referenced
+  against the Unfit-1.0 library - see ATTRIBUTION.md - rather than
+  re-derived from memory) as the only remaining option.

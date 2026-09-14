@@ -15,6 +15,98 @@ local function CleanLine(rawLine)
   return strtrim(StripEscapes(rawLine or ""))
 end
 
+--------------------------------------------------------------------------
+-- Class armor/weapon proficiency (#35)
+--
+-- No live signal exposes this: confirmed live that a shield's tooltip on
+-- a Mage (plain and structured) carries no proficiency line at all, and
+-- C_Item.IsUsableItem returns usable=false even for the player's own
+-- equipped gear - not a proficiency check for anything, apparently. This
+-- table is the only remaining option. Data cross-referenced against the
+-- Unfit-1.0 library (GPL-3.0-licensed, embedded in Bagnon/AdiBags/etc,
+-- https://www.curseforge.com/wow/addons/unfit) rather than re-derived
+-- from memory, since getting this list subtly wrong would be worse than
+-- not having the feature at all.
+--------------------------------------------------------------------------
+
+local W = Enum.ItemWeaponSubclass
+local A = Enum.ItemArmorSubclass
+
+local UNUSABLE_WEAPON_SUBCLASSES = {
+  DEATHKNIGHT = { [W.Bows]=true, [W.Guns]=true, [W.Warglaive]=true, [W.Staff]=true, [W.Unarmed]=true,
+    [W.Dagger]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  DEMONHUNTER = { [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Mace1H]=true, [W.Mace2H]=true,
+    [W.Polearm]=true, [W.Sword2H]=true, [W.Staff]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  DRUID = { [W.Axe1H]=true, [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Sword1H]=true, [W.Sword2H]=true,
+    [W.Warglaive]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  EVOKER = { [W.Bows]=true, [W.Guns]=true, [W.Polearm]=true, [W.Warglaive]=true, [W.Thrown]=true,
+    [W.Crossbow]=true, [W.Wand]=true },
+  HUNTER = { [W.Mace1H]=true, [W.Mace2H]=true, [W.Warglaive]=true, [W.Thrown]=true, [W.Wand]=true },
+  MAGE = { [W.Axe1H]=true, [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Mace1H]=true, [W.Mace2H]=true,
+    [W.Polearm]=true, [W.Sword2H]=true, [W.Warglaive]=true, [W.Unarmed]=true, [W.Thrown]=true, [W.Crossbow]=true },
+  MONK = { [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Mace2H]=true, [W.Sword2H]=true, [W.Warglaive]=true,
+    [W.Dagger]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  PALADIN = { [W.Bows]=true, [W.Guns]=true, [W.Warglaive]=true, [W.Staff]=true, [W.Unarmed]=true,
+    [W.Dagger]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  PRIEST = { [W.Axe1H]=true, [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Mace2H]=true, [W.Polearm]=true,
+    [W.Sword1H]=true, [W.Sword2H]=true, [W.Warglaive]=true, [W.Unarmed]=true, [W.Thrown]=true, [W.Crossbow]=true },
+  ROGUE = { [W.Axe2H]=true, [W.Mace2H]=true, [W.Polearm]=true, [W.Sword2H]=true, [W.Warglaive]=true,
+    [W.Staff]=true, [W.Wand]=true },
+  SHAMAN = { [W.Bows]=true, [W.Guns]=true, [W.Polearm]=true, [W.Sword1H]=true, [W.Sword2H]=true,
+    [W.Warglaive]=true, [W.Thrown]=true, [W.Crossbow]=true, [W.Wand]=true },
+  WARLOCK = { [W.Axe1H]=true, [W.Axe2H]=true, [W.Bows]=true, [W.Guns]=true, [W.Mace1H]=true, [W.Mace2H]=true,
+    [W.Polearm]=true, [W.Sword2H]=true, [W.Warglaive]=true, [W.Unarmed]=true, [W.Thrown]=true, [W.Crossbow]=true },
+  WARRIOR = { [W.Warglaive]=true, [W.Wand]=true },
+}
+
+local UNUSABLE_ARMOR_SUBCLASSES = {
+  DEATHKNIGHT = { [A.Shield]=true },
+  DEMONHUNTER = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  DRUID = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  EVOKER = { [A.Plate]=true, [A.Shield]=true },
+  HUNTER = { [A.Plate]=true, [A.Shield]=true },
+  MAGE = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  MONK = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  PALADIN = {},
+  PRIEST = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  ROGUE = { [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  SHAMAN = { [A.Plate]=true },
+  WARLOCK = { [A.Leather]=true, [A.Mail]=true, [A.Plate]=true, [A.Shield]=true },
+  WARRIOR = {},
+}
+
+-- Classes that cannot dual-wield: an off-hand weapon (INVTYPE_WEAPONOFFHAND
+-- - a literal second weapon, not a shield/holdable/relic) is never usable
+-- for them regardless of its own weapon subclass.
+local CANNOT_DUAL_WIELD = {
+  DRUID = true, EVOKER = true, MAGE = true, PALADIN = true, PRIEST = true, WARLOCK = true,
+}
+
+-- True unless the player's class lacks proficiency for this item's armor
+-- type or weapon type. Unlisted classes/subclasses (e.g. holdable
+-- off-hand items, which no class is ever restricted from) default usable.
+function Classify:IsClassProficient(item)
+  local class = UnitClassBase and UnitClassBase("player")
+  if not class or not item.classID or not item.subclassID then
+    return true
+  end
+
+  if item.classID == Enum.ItemClass.Weapon then
+    if item.equipLoc == "INVTYPE_WEAPONOFFHAND" and CANNOT_DUAL_WIELD[class] then
+      return false
+    end
+    local unusable = UNUSABLE_WEAPON_SUBCLASSES[class]
+    return not (unusable and unusable[item.subclassID])
+  end
+
+  if item.classID == Enum.ItemClass.Armor then
+    local unusable = UNUSABLE_ARMOR_SUBCLASSES[class]
+    return not (unusable and unusable[item.subclassID])
+  end
+
+  return true
+end
+
 -- A dedicated, never-shown tooltip for reading any item's tooltip text in
 -- the background - the only way to classify hundreds of bag/bank items
 -- without literally hovering each one. Confirmed live (#10): a tooltip

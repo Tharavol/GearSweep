@@ -59,4 +59,5 @@ currently only has diagnostic logging; an auto-open toggle lands with
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE). See [ATTRIBUTION.md](ATTRIBUTION.md) for a
+third-party data source cross-referenced (not vendored) in Classify.lua.

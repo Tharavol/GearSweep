@@ -33,7 +33,7 @@ read_globals = {
     "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",
 
     -- Item/unit/spec queries
-    "UnitClass", "GetSpecialization", "GetSpecializationInfo", "CursorHasItem", "strtrim",
+    "UnitClass", "UnitClassBase", "GetSpecialization", "GetSpecializationInfo", "CursorHasItem", "strtrim",
     "ITEM_QUALITY_COLORS", "GetInventorySlotInfo", "GetInventoryItemLink",
 }
 

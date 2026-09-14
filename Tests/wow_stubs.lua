@@ -35,6 +35,24 @@ function stubs.install(env)
 
   env.C_Bank = nil
 
+  -- Real Blizzard item classification enums, for Classify.lua's class
+  -- proficiency table (#35).
+  env.Enum = env.Enum or {}
+  env.Enum.ItemClass = { Weapon = 2, Armor = 4 }
+  env.Enum.ItemWeaponSubclass = {
+    Axe1H = 0, Axe2H = 1, Bows = 2, Guns = 3, Mace1H = 4, Mace2H = 5, Polearm = 6,
+    Sword1H = 7, Sword2H = 8, Warglaive = 9, Staff = 10, Bearclaw = 11, Catclaw = 12,
+    Unarmed = 13, Generic = 14, Dagger = 15, Thrown = 16, Obsolete3 = 17, Crossbow = 18,
+    Wand = 19, Fishingpole = 20,
+  }
+  env.Enum.ItemArmorSubclass = {
+    Generic = 0, Cloth = 1, Leather = 2, Mail = 3, Plate = 4, Cosmetic = 5, Shield = 6,
+    Libram = 7, Idol = 8, Totem = 9, Sigil = 10, Relic = 11,
+  }
+
+  -- Tests override this per-case; default keeps unrelated tests inert.
+  env.UnitClassBase = function() return nil end
+
   -- Real Blizzard inventory slot IDs (GetInventorySlotInfo), stable since
   -- Classic. Every slot starts empty (GetInventoryItemLink returns nil);
   -- tests override it per-case to simulate equipped gear.

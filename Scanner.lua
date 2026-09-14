@@ -104,7 +104,8 @@ function Scanner:ScanAll()
     for slot = 1, numSlots do
       local info = C_Container.GetContainerItemInfo(bagID, slot)
       if info and info.hyperlink then
-        local name, _, quality, itemLevel, _, _, _, _, equipLoc = C_Item.GetItemInfo(info.hyperlink)
+        local name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID, subclassID =
+          C_Item.GetItemInfo(info.hyperlink)
         if equipLoc and EQUIPPABLE_SLOTS[equipLoc] then
           local detailedLevel = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(info.hyperlink)
           table.insert(items, {
@@ -119,6 +120,9 @@ function Scanner:ScanAll()
             quality = quality,
             itemLevel = detailedLevel or itemLevel,
             equipLoc = equipLoc,
+            -- For class/armor/weapon proficiency (#35).
+            classID = classID,
+            subclassID = subclassID,
             isBound = info.isBound,
             source = location.source,
           })
