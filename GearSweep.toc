@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: GearSweep
 ## Notes: Sweeps your bank and Warband Bank for disenchant fodder and class/spec upgrades.
 ## Author: Tharavol, Claude
