@@ -4,6 +4,23 @@ All notable changes to GearSweep are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Pull Selected could send items back into the bank (#42, confirmed live
+  via `/gs debug` trace on a fresh character pulling Warband Bank gear).
+  `Scanner:WithdrawToBags` settled on the first `ITEM_LOCK_CHANGED` or a
+  1s timeout and counted the move as done while the destination still
+  read empty. The next withdrawal then picked the same slot, and when both
+  moves landed the items swapped, putting one back in the bank. A move now
+  only counts once the destination holds the item, unlocked, re-checked on
+  every `ITEM_LOCK_CHANGED`/`BAG_UPDATE_DELAYED`. The safety-net timeout is
+  now 3s, and a move still unconfirmed at that point is reported as
+  skipped ("move not confirmed") rather than pulled. Each pull also
+  reserves the destination slots its withdrawals have claimed, so a slot
+  can never be reused while a move into it is in progress.
+- Pull Selected no longer moves checked items that are already in the
+  character's bags into a different bag slot (#43). They stay where they
+  are, and the summary reports them as "already in bags".
+
 ## [1.0.0] - 2026-09-14
 
 ### Added

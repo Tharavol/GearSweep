@@ -298,6 +298,30 @@ do
 end
 
 do
+  -- #43: scanned items record whether they're already in the character's
+  -- bags, so Pull Selected can leave those in place.
+  C_Bank = {
+    FetchViewableBankTypes = function() return { 2 } end,
+    FetchPurchasedBankTabIDs = function() return { 15 } end,
+  }
+  Enum.BankType = { Account = 2 }
+  mockContainers({
+    [0] = { [1] = { hyperlink = "item:belt" } },
+    [15] = { [1] = { hyperlink = "item:helm" } },
+  })
+  mockItemInfo({
+    ["item:belt"] = { "Belt", 4, 200, "INVTYPE_WAIST", 4, 4 },
+    ["item:helm"] = { "Helm", 4, 200, "INVTYPE_HEAD", 4, 4 },
+  })
+
+  local items = ns.Scanner:ScanAll()
+  equals(items[1].inBags, true, "an item in a character bag is marked as already in bags")
+  equals(items[2].inBags, false, "an item in a bank tab is not marked as in bags")
+
+  resetScannerMocks()
+end
+
+do
   -- ScanAll enumerates real gear, skips empty slots and non-gear items
   -- (a potion's equipLoc, and the cosmetic-only shirt/tabard slots), and
   -- prefers the detailed (upgraded) item level over GetItemInfo's own.
@@ -353,13 +377,13 @@ end
 -- (cursor busy, item gone, bags full) call back immediately; the
 -- pickup/place path only calls back once ITEM_LOCK_CHANGED fires (or the
 -- safety-net timeout elapses) - see stubs.fireEvent/drainTimers below.
-local function callWithdraw(bagID, slot)
+local function callWithdraw(bagID, slot, reserved)
   local result = {}
   ns.Scanner:WithdrawToBags(bagID, slot, function(ok, reason)
     result.called = true
     result.ok = ok
     result.reason = reason
-  end)
+  end, reserved)
   return result
 end
 
@@ -424,6 +448,8 @@ do
   local result = callWithdraw(6, 3)
   check(not result.called, "WithdrawToBags does not call back until the move is confirmed")
 
+  -- The item lands, unlocked, in the destination slot.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" }, [2] = { hyperlink = "item:bank" } } })
   stubs.fireEvent("ITEM_LOCK_CHANGED")
   check(result.ok, "WithdrawToBags succeeds once ITEM_LOCK_CHANGED confirms the move")
   equals(#pickups, 2, "WithdrawToBags picks up the source item, then the empty destination slot")
@@ -438,16 +464,97 @@ end
 
 do
   -- If ITEM_LOCK_CHANGED never fires for some edge case, the safety-net
-  -- timeout still resolves the withdrawal instead of hanging forever.
+  -- timeout still resolves the withdrawal instead of hanging forever - as
+  -- a success when the item is sitting in the destination, even if it
+  -- still reads locked.
   mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
   C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
 
   local result = callWithdraw(6, 3)
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" }, [2] = { hyperlink = "item:bank", isLocked = true } } })
   stubs.drainTimers()
   check(result.ok, "WithdrawToBags's safety-net timeout resolves the withdrawal without a lock-change event")
 
   resetScannerMocks()
   C_Container.PickupContainerItem = function() end
+end
+
+do
+  -- #42, confirmed live: a Warband Bank withdrawal was counted as done on
+  -- the first lock event while the destination still read empty, and the
+  -- next withdrawal reused that slot. Lock events before the item has
+  -- landed (or while it's still locked) must keep waiting.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local result = callWithdraw(6, 3)
+  stubs.fireEvent("ITEM_LOCK_CHANGED")
+  check(not result.called, "WithdrawToBags keeps waiting when a lock event fires before the item lands")
+
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" }, [2] = { hyperlink = "item:bank", isLocked = true } } })
+  stubs.fireEvent("ITEM_LOCK_CHANGED")
+  check(not result.called, "WithdrawToBags keeps waiting while the landed item is still locked")
+
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" }, [2] = { hyperlink = "item:bank" } } })
+  stubs.fireEvent("BAG_UPDATE_DELAYED")
+  check(result.ok, "WithdrawToBags succeeds once the item is in the destination and unlocked")
+
+  stubs.resetTimers()
+  resetScannerMocks()
+end
+
+do
+  -- #42: a move that still hasn't landed when the safety net fires is not
+  -- a success - it's reported as unconfirmed, and its destination stays
+  -- reserved in case it lands later.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local reserved = {}
+  local result = {}
+  ns.Scanner:WithdrawToBags(6, 3, function(ok, reason) result.ok, result.reason = ok, reason end, reserved)
+  stubs.drainTimers()
+  equals(result.ok, false, "WithdrawToBags reports failure when the move never lands before the timeout")
+  equals(result.reason, "move not confirmed", "WithdrawToBags explains the move wasn't confirmed")
+  check(reserved["0:2"], "an unconfirmed move keeps its destination reserved")
+
+  resetScannerMocks()
+end
+
+do
+  -- #42: slots reserved by earlier withdrawals in the same pull are
+  -- skipped even though they still read empty, and each withdrawal
+  -- reserves its own destination.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 4 or 0 end
+
+  local pickups = {}
+  C_Container.PickupContainerItem = function(bagID, slot)
+    table.insert(pickups, { bagID = bagID, slot = slot })
+  end
+
+  local reserved = { ["0:2"] = true }
+  ns.Scanner:WithdrawToBags(6, 3, function() end, reserved)
+  equals(pickups[2].slot, 3, "WithdrawToBags skips an empty slot another in-flight withdrawal reserved")
+  check(reserved["0:3"], "WithdrawToBags reserves the destination it chose")
+
+  stubs.resetTimers()
+  stubs.resetEventFrames()
+  resetScannerMocks()
+  C_Container.PickupContainerItem = function() end
+end
+
+do
+  -- Every empty slot is reserved: that's bags full, not a reuse.
+  mockContainers({ [0] = { [1] = { hyperlink = "item:a" } }, [6] = { [3] = { hyperlink = "item:bank" } } })
+  C_Container.GetContainerNumSlots = function(bagID) return bagID == 0 and 2 or 0 end
+
+  local result = {}
+  ns.Scanner:WithdrawToBags(6, 3, function(ok, reason) result.ok, result.reason = ok, reason end,
+    { ["0:2"] = true })
+  equals(result.reason, "bags full", "WithdrawToBags treats a fully reserved bag as full")
+
+  resetScannerMocks()
 end
 
 do
@@ -466,9 +573,11 @@ do
   end
   CursorHasItem = function() return pickupCount >= 2 end -- false at entry, still holding once settled
 
-  local result = callWithdraw(6, 1)
+  local reserved = {}
+  local result = callWithdraw(6, 1, reserved)
   stubs.fireEvent("ITEM_LOCK_CHANGED")
   check(not result.ok, "WithdrawToBags reports failure when the cursor is still holding the item once settled")
+  check(not reserved["0:2"], "a destination nothing is headed to is released from the reservation set (#42)")
   equals(result.reason, "failed to place item", "WithdrawToBags explains why it failed")
   equals(#pickups, 3, "WithdrawToBags puts the item back rather than leaving the cursor stuck")
   equals(pickups[3].bagID, 6, "the recovery pickup targets the original source bag")
@@ -1328,6 +1437,60 @@ do
 
   pending[2].callback(true)
   equals(printedMessages[before + 1], "Pulled 2 item(s).", "both items are counted once both withdrawals resolved")
+end
+
+do
+  -- #42: every withdrawal in one pull shares a single reservation set, so
+  -- a slot claimed by an earlier, still-landing move is never reused.
+  local seen = {}
+  ns.Scanner = {
+    WithdrawToBags = function(_, _, _, callback, reserved)
+      table.insert(seen, reserved)
+      callback(true)
+    end,
+  }
+  ns.UI:SetRowsForTesting({
+    fakeRow({ bagID = 6, slot = 1, name = "Sword" }, true),
+    fakeRow({ bagID = 6, slot = 2, name = "Shield" }, true),
+  })
+
+  ns.UI.PullSelected()
+  check(type(seen[1]) == "table", "PullSelected passes a reservation set to WithdrawToBags")
+  check(seen[1] == seen[2], "PullSelected shares one reservation set across the whole pull")
+end
+
+do
+  -- #43, confirmed live: checked items already in the character's bags
+  -- were "pulled" into another bag slot. They're left in place and
+  -- reported, not withdrawn or counted as pulled.
+  local withdrawn = {}
+  ns.Scanner = {
+    WithdrawToBags = function(_, bagID, slot, callback)
+      table.insert(withdrawn, bagID .. ":" .. slot)
+      callback(true)
+    end,
+  }
+  ns.UI:SetRowsForTesting({
+    fakeRow({ bagID = 3, slot = 2, name = "Belt", inBags = true }, true),
+    fakeRow({ bagID = 6, slot = 1, name = "Helm" }, true),
+    fakeRow({ bagID = 0, slot = 6, name = "Ring", inBags = true }, true),
+  })
+
+  local before = #printedMessages
+  ns.UI.PullSelected()
+  equals(#withdrawn, 1, "PullSelected only withdraws items that aren't already in bags")
+  equals(withdrawn[1], "6:1", "PullSelected withdraws the bank item")
+  equals(printedMessages[before + 1], "Pulled 1 item(s). 2 already in bags.",
+    "PullSelected reports items already in bags separately from pulled ones")
+
+  ns.Scanner = {
+    WithdrawToBags = function() error("must not be called") end,
+  }
+  ns.UI:SetRowsForTesting({ fakeRow({ bagID = 0, slot = 1, name = "Belt", inBags = true }, true) })
+  before = #printedMessages
+  ns.UI.PullSelected()
+  equals(printedMessages[before + 1], "Pulled 0 item(s). 1 already in bags.",
+    "a pull of only bag items moves nothing")
 end
 
 --------------------------------------------------------------------------

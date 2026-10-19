@@ -8,6 +8,11 @@ ns.Scanner = Scanner
 -- deliberately excluded.
 local CHARACTER_BAG_IDS = { 0, 1, 2, 3, 4 }
 
+-- Seconds WithdrawToBags waits for a move to confirm before giving up.
+-- Warband Bank moves round-trip through the server; the original 1s
+-- window was confirmed live to be too short for them (#42).
+local WITHDRAW_TIMEOUT = 3
+
 -- Real wearable-gear equip slots. An allowlist rather than a blacklist:
 -- confirmed live (#8) that C_Item.GetItemInfo's 9th return value is a real,
 -- non-empty sentinel string for plenty of non-gear items too (e.g. a
@@ -83,7 +88,7 @@ end
 function Scanner:GetLocations()
   local locations = {}
   for _, bagID in ipairs(CHARACTER_BAG_IDS) do
-    table.insert(locations, { bagID = bagID, source = "Bags" })
+    table.insert(locations, { bagID = bagID, source = "Bags", inBags = true })
   end
   for _, entry in ipairs(GetBankLocations()) do
     table.insert(locations, entry)
@@ -126,6 +131,9 @@ function Scanner:ScanAll()
             subclassID = subclassID,
             isBound = info.isBound,
             source = location.source,
+            -- Already in the character's bags: Pull Selected leaves it
+            -- where it is rather than shuffling it to another bag slot (#43).
+            inBags = location.inBags or false,
           })
         end
       end
@@ -153,8 +161,22 @@ end
 -- actual fix; a short timeout is a safety net in case that event doesn't
 -- fire for some edge case, so a pull can never hang indefinitely.
 --
+-- The first ITEM_LOCK_CHANGED isn't the end of the move, though (#42,
+-- confirmed live via debug trace): Warband Bank withdrawals go through the
+-- server, and settling on the first lock event (or a 1s timeout) counted
+-- moves as done while the destination slot still read empty. The next
+-- withdrawal then picked that same slot, and when both moves landed the
+-- items swapped, sending one back into the bank. Each lock/bag event now
+-- re-checks whether the destination actually holds the item, unlocked, and
+-- only that counts as success.
+--
+-- `reserved` (optional) is a set of "bag:slot" keys already claimed by
+-- earlier withdrawals in the same pull. The empty-slot scan skips them and
+-- this call adds its own destination, so two in-flight moves can never
+-- target the same slot even if container state hasn't caught up yet.
+--
 -- Calls callback(true) on success, or callback(false, reason) on failure.
-function Scanner:WithdrawToBags(bagID, slot, callback)
+function Scanner:WithdrawToBags(bagID, slot, callback, reserved)
   if CursorHasItem() then
     callback(false, "cursor is already holding something")
     return
@@ -176,7 +198,7 @@ function Scanner:WithdrawToBags(bagID, slot, callback)
   for _, id in ipairs(CHARACTER_BAG_IDS) do
     local numSlots = C_Container.GetContainerNumSlots(id) or 0
     for s = 1, numSlots do
-      if not C_Container.GetContainerItemInfo(id, s) then
+      if not C_Container.GetContainerItemInfo(id, s) and not (reserved and reserved[id .. ":" .. s]) then
         emptyBag, emptySlot = id, s
         break
       end
@@ -189,6 +211,9 @@ function Scanner:WithdrawToBags(bagID, slot, callback)
     return
   end
 
+  local destKey = emptyBag .. ":" .. emptySlot
+  if reserved then reserved[destKey] = true end
+
   ns.Debug("WithdrawToBags: bag %d slot %d -> bag %d slot %d", bagID, slot, emptyBag, emptySlot)
   C_Container.PickupContainerItem(bagID, slot)
   C_Container.PickupContainerItem(emptyBag, emptySlot)
@@ -196,30 +221,48 @@ function Scanner:WithdrawToBags(bagID, slot, callback)
   local watcher = CreateFrame("Frame")
   local settled = false
 
-  local function Settle()
-    if settled then return end
+  local function Finish(ok, reason)
     settled = true
     watcher:UnregisterAllEvents()
     watcher:SetScript("OnEvent", nil)
+    callback(ok, reason)
+  end
+
+  -- timedOut: the safety net fired rather than an event. A destination that
+  -- holds the item but still reads locked is accepted then, rather than
+  -- reported as failed for an item that's sitting in the bag.
+  local function Check(timedOut)
+    if settled then return end
 
     local stillHolding = CursorHasItem()
-    ns.Debug("WithdrawToBags: settled - cursor still holding: %s, destination occupied: %s",
-      tostring(stillHolding), tostring(C_Container.GetContainerItemInfo(emptyBag, emptySlot) ~= nil))
+    local dest = C_Container.GetContainerItemInfo(emptyBag, emptySlot)
+    local landed = dest ~= nil and (timedOut or not dest.isLocked)
+    ns.Debug("WithdrawToBags: check%s - cursor still holding: %s, destination occupied: %s, locked: %s",
+      timedOut and " (timeout)" or "", tostring(stillHolding), tostring(dest ~= nil),
+      tostring(dest ~= nil and dest.isLocked == true))
 
     if stillHolding then
       -- The destination slot wasn't actually empty once the transaction
       -- settled - put the item back rather than leave the cursor stuck
       -- holding it, which would otherwise cascade into every later
       -- withdrawal in the same pull failing with "cursor is already
-      -- holding something".
+      -- holding something". The slot is released since nothing is headed
+      -- there.
       C_Container.PickupContainerItem(bagID, slot)
-      callback(false, "failed to place item")
-    else
-      callback(true)
+      if reserved then reserved[destKey] = nil end
+      Finish(false, "failed to place item")
+    elseif landed then
+      Finish(true)
+    elseif timedOut then
+      -- The move may still complete later, so the slot stays reserved for
+      -- the rest of the pull; it just can't be counted as pulled.
+      Finish(false, "move not confirmed")
     end
+    -- Otherwise still in flight: keep waiting for the next event.
   end
 
   watcher:RegisterEvent("ITEM_LOCK_CHANGED")
-  watcher:SetScript("OnEvent", Settle)
-  C_Timer.After(1, Settle)
+  watcher:RegisterEvent("BAG_UPDATE_DELAYED")
+  watcher:SetScript("OnEvent", function() Check(false) end)
+  C_Timer.After(WITHDRAW_TIMEOUT, function() Check(true) end)
 end

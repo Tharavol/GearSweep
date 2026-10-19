@@ -294,26 +294,44 @@ end
 -- reported "Pulled 2 item(s)" but only 1 actually arrived, because the
 -- client's own container state doesn't reflect a just-issued pickup/place
 -- pair by the very next line of Lua).
+--
+-- Checked items already in the character's bags are left where they are
+-- (#43): moving them to another bag slot achieves nothing and only adds
+-- more moves that can collide.
 local function PullSelected()
   local queue = {}
+  local alreadyInBags = 0
   for _, row in ipairs(rows) do
     if row.item and row.checkbox:GetChecked() then
-      table.insert(queue, row)
+      if row.item.inBags then
+        alreadyInBags = alreadyInBags + 1
+      else
+        table.insert(queue, row)
+      end
     end
   end
 
   local moved, failed, skipped = 0, 0, 0
   local skipReason
   local index = 0
+  -- Destination slots claimed by this pull's withdrawals (#42), shared
+  -- across every WithdrawToBags call so none can reuse a slot whose move
+  -- hasn't shown up in container state yet.
+  local reserved = {}
 
   local function Finish()
+    local summary
     if failed > 0 then
-      ns.Print("Pulled %d item(s). Stopped: bags are full (%d remaining).", moved, failed)
+      summary = ("Pulled %d item(s). Stopped: bags are full (%d remaining)."):format(moved, failed)
     elseif skipped > 0 then
-      ns.Print("Pulled %d item(s), skipped %d (%s).", moved, skipped, skipReason or "unknown reason")
+      summary = ("Pulled %d item(s), skipped %d (%s)."):format(moved, skipped, skipReason or "unknown reason")
     else
-      ns.Print("Pulled %d item(s).", moved)
+      summary = ("Pulled %d item(s)."):format(moved)
     end
+    if alreadyInBags > 0 then
+      summary = summary .. (" %d already in bags."):format(alreadyInBags)
+    end
+    ns.Print(summary)
     UI:Refresh()
   end
 
@@ -347,7 +365,7 @@ local function PullSelected()
         ns.Debug("Skipped %s: %s", row.item.name or row.item.hyperlink, reason or "unknown reason")
         ProcessNext()
       end
-    end)
+    end, reserved)
   end
 
   ProcessNext()
