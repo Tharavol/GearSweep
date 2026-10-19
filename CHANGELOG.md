@@ -4,6 +4,8 @@ All notable changes to GearSweep are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-19
+
 ### Fixed
 - Pull Selected could send items back into the bank (#42, confirmed live
   via `/gs debug` trace on a fresh character pulling Warband Bank gear).
