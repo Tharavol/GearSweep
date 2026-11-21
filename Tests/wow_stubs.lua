@@ -34,7 +34,11 @@ function stubs.install(env)
     GetContainerItemInfo = function() return nil end,
   }
 
-  env.C_Bank = nil
+  -- No bank tabs purchased; tests override per case.
+  env.C_Bank = {
+    FetchViewableBankTypes = function() return {} end,
+    FetchPurchasedBankTabIDs = function() return {} end,
+  }
 
   -- Tests override this per case to simulate an item's upgrade-track/
   -- requirement tooltip data (Classify.lua's season/tier/usable checks).
@@ -87,6 +91,7 @@ function stubs.install(env)
   -- proficiency table (#35).
   env.Enum = env.Enum or {}
   env.Enum.ItemClass = { Weapon = 2, Armor = 4 }
+  env.Enum.BankType = { Character = 0, Account = 2 }
   env.Enum.ItemWeaponSubclass = {
     Axe1H = 0, Axe2H = 1, Bows = 2, Guns = 3, Mace1H = 4, Mace2H = 5, Polearm = 6,
     Sword1H = 7, Sword2H = 8, Warglaive = 9, Staff = 10, Bearclaw = 11, Catclaw = 12,

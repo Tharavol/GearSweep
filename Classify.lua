@@ -18,15 +18,9 @@ end
 --------------------------------------------------------------------------
 -- Class armor/weapon proficiency (#35)
 --
--- No live signal exposes this: confirmed live that a shield's tooltip on
--- a Mage (plain and structured) carries no proficiency line at all, and
--- C_Item.IsUsableItem returns usable=false even for the player's own
--- equipped gear - not a proficiency check for anything, apparently. This
--- table is the only remaining option. Data cross-referenced against the
--- Unfit-1.0 library (GPL-3.0-licensed, embedded in Bagnon/AdiBags/etc,
--- https://www.curseforge.com/wow/addons/unfit) rather than re-derived
--- from memory, since getting this list subtly wrong would be worse than
--- not having the feature at all.
+-- No tooltip line or API exposes proficiency, so this is a hand-maintained
+-- table, cross-referenced against the Unfit-1.0 library (GPL-3.0,
+-- https://www.curseforge.com/wow/addons/unfit).
 --------------------------------------------------------------------------
 
 local W = Enum.ItemWeaponSubclass
@@ -59,15 +53,9 @@ local UNUSABLE_WEAPON_SUBCLASSES = {
   WARRIOR = { [W.Warglaive]=true, [W.Wand]=true },
 }
 
--- Each class's own real armor type - not "that type or anything lighter"
--- (confirmed live, #40: a Death Knight, plate's own class, was recommended
--- non-plate armor because the previous table only ever excluded the
--- heavier types above a class's own, e.g. excluding Mail/Plate for a
--- Leather class but never excluding Cloth for anyone above it - so every
--- plate class had essentially no armor-type restriction at all beyond
--- shields). An upgrade recommendation needs a real stat gain, not merely
--- technically-equippable gear, so this is an exact match against a
--- class's one real armor type, checked separately from shield usability.
+-- Each class's own armor type, matched exactly rather than "that type or
+-- lighter": an upgrade needs a real stat gain, not merely equippable gear
+-- (#40). Shields are checked separately.
 local CLASS_ARMOR_TYPE = {
   DEATHKNIGHT = A.Plate,
   DEMONHUNTER = A.Leather,
@@ -133,11 +121,8 @@ function Classify:IsClassProficient(item)
   return true
 end
 
--- A dedicated, never-shown tooltip for reading any item's tooltip text in
--- the background - the only way to classify hundreds of bag/bank items
--- without literally hovering each one. Confirmed live (#10): a tooltip
--- like this receives the same contextual annotations (e.g. "Best in Slot")
--- as the default GameTooltip, not just the raw item hyperlink data.
+-- Hidden tooltip for reading item text in the background. It receives the
+-- same contextual annotations (e.g. "Best in Slot") as GameTooltip (#10).
 local scanTooltip
 
 local function GetScanTooltip()
@@ -160,16 +145,10 @@ local function GetTooltipLines(link)
   return lines
 end
 
--- The upgrade-track line (structured C_TooltipInfo line type 32) is
--- present only while an item's track is still current; a previous-season
--- item keeps its item level but loses this line entirely (confirmed live,
--- comparing this season's and last season's Adventurer-tier gear - #9).
+-- The upgrade-track line (C_TooltipInfo line type 32) is present only while
+-- an item's track is current; previous-season items lose it (#9).
 -- Returns {name, currentLevel, maxLevel} or nil.
 function Classify:GetUpgradeTrackInfo(link)
-  if not C_TooltipInfo then
-    return nil
-  end
-
   local data = C_TooltipInfo.GetHyperlink(link)
   if not data or not data.lines then
     return nil
@@ -189,8 +168,7 @@ function Classify:GetUpgradeTrackInfo(link)
   return nil
 end
 
--- True when the item still carries an upgrade track, i.e. it's from the
--- current season. False for previous-season or older-expansion gear.
+-- True when the item still carries an upgrade track (current season).
 function Classify:IsCurrentSeason(link)
   return self:GetUpgradeTrackInfo(link) ~= nil
 end
@@ -200,22 +178,10 @@ function Classify:IsAdventurerTier(link)
   return track ~= nil and track.name == "Adventurer"
 end
 
--- C_Item.IsUsableItem looked like the real class/armor/weapon proficiency
--- signal (#35) - it correctly flagged a shield as unusable on a Mage -
--- but confirmed live it ALSO returns usable=false for a plain cloth chest
--- piece the same Mage can obviously wear, as long as the item is still
--- Warband-Bank-sourced ("Binds to Warband until equipped", not yet bound
--- to this character). It isn't a proficiency check for these items at
--- all - likely some form of ownership/binding gate - so it's not used
--- here. Scans structured requirement lines (type 43: level/skill/
--- reputation requirements) for Blizzard's own "usable" flag instead; see
--- #35 for the still-open problem of detecting armor/weapon proficiency
--- itself, which this tooltip data doesn't carry for these items either.
+-- Reads the "usable" flag on requirement lines (type 43: level/skill/
+-- reputation). Not C_Item.IsUsableItem: it reports unbound Warband Bank
+-- gear as unusable (#35).
 function Classify:IsUsable(link)
-  if not C_TooltipInfo then
-    return true
-  end
-
   local data = C_TooltipInfo.GetHyperlink(link)
   if not data or not data.lines then
     return true
@@ -230,39 +196,30 @@ function Classify:IsUsable(link)
   return true
 end
 
--- #35 debug dump: raw tooltip data for one item (plain text plus every
--- structured C_TooltipInfo line's type/usable/leftText), so a live report
--- can show exactly what Blizzard's tooltip actually says about an item
--- IsUsable got wrong, rather than guessing at tooltip structure again.
+-- Debug dump (#35): an item's plain and structured tooltip lines.
 function Classify:DumpTooltip(link)
   ns.Print("Plain tooltip lines:")
   for i, rawLine in ipairs(GetTooltipLines(link)) do
     print(("  %d: %s"):format(i, CleanLine(rawLine)))
   end
 
-  if C_TooltipInfo then
-    local data = C_TooltipInfo.GetHyperlink(link)
-    if data and data.lines then
-      print("Structured tooltip lines:")
-      for i, line in ipairs(data.lines) do
-        print(("  %d: type=%s usable=%s leftText=%s"):format(
-          i, tostring(line.type), tostring(line.usable), tostring(line.leftText)))
-      end
+  local data = C_TooltipInfo.GetHyperlink(link)
+  if data and data.lines then
+    print("Structured tooltip lines:")
+    for i, line in ipairs(data.lines) do
+      print(("  %d: type=%s usable=%s leftText=%s"):format(
+        i, tostring(line.type), tostring(line.usable), tostring(line.leftText)))
     end
   end
 
-  if C_Item and C_Item.IsUsableItem then
-    local usable, noMana = C_Item.IsUsableItem(link)
-    print(("C_Item.IsUsableItem: usable=%s noMana=%s"):format(tostring(usable), tostring(noMana)))
-  end
+  local usable, noMana = C_Item.IsUsableItem(link)
+  print(("C_Item.IsUsableItem: usable=%s noMana=%s"):format(tostring(usable), tostring(noMana)))
 
   print(("IsUsable: %s"):format(tostring(self:IsUsable(link))))
 end
 
--- Raw "Best in Slot" label lines (e.g. "Holy Paladin"), read off a
--- background tooltip since this annotation isn't in the structured
--- C_TooltipInfo data (#10). Empty when the item has no such annotation -
--- most gear doesn't, and that alone isn't a sign of irrelevance.
+-- "Best in Slot" label lines (e.g. "Holy Paladin"), read from the plain
+-- tooltip text since structured C_TooltipInfo data lacks them (#10).
 function Classify:GetBestInSlotSpecs(link)
   local lines = GetTooltipLines(link)
   local specs = {}
@@ -283,9 +240,8 @@ function Classify:GetBestInSlotSpecs(link)
   return specs
 end
 
--- True when the item either has no "Best in Slot" annotation at all (most
--- gear - not a signal either way), or its annotation includes the
--- character's current class and spec.
+-- True when the item has no "Best in Slot" annotation (most gear), or the
+-- annotation names the character's current class and spec.
 function Classify:IsSpecAppropriate(link)
   local specs = self:GetBestInSlotSpecs(link)
   if #specs == 0 then
@@ -308,21 +264,15 @@ function Classify:IsSpecAppropriate(link)
   return false
 end
 
--- Uncommon (green), Rare (blue), Epic (purple). Poor and Common (white) -
--- shirts included, since those are Common anyway - are never disenchant
--- material.
+-- Uncommon, Rare, Epic. Poor and Common are never disenchant material.
 local DISENCHANT_QUALITIES = { [2] = true, [3] = true, [4] = true }
 
 function Classify:IsDisenchantEligibleQuality(quality)
   return DISENCHANT_QUALITIES[quality] == true
 end
 
--- The baseline definition of a disenchant candidate (#11): eligible
--- quality, and either Adventurer tier (current season's lowest track) or
--- from a previous season/expansion entirely. Never true for current-season
--- gear above Adventurer tier. Scanner only enumerates bags/bank contents,
--- never equipped-item slots, so a currently-equipped item can never reach
--- this check in the first place.
+-- Disenchant candidate (#11): eligible quality, and either Adventurer tier
+-- or from a previous season/expansion.
 function Classify:IsDisenchantCandidate(item)
   if not self:IsDisenchantEligibleQuality(item.quality) then
     return false

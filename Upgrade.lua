@@ -28,12 +28,8 @@ local OFF_HAND = {
 -- both be genuine upgrades at once.
 local DUAL_SLOT = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
 
--- Real inventory slot names (Blizzard's GetInventorySlotInfo) an equip
--- location's currently-equipped item level gets read from, for the "is
--- this actually higher than what I'm wearing" comparison below. Finger and
--- Trinket map to both of their physical slots. Off-hand-shaped equip locs
--- (shield/holdable/relic) all read the same SecondaryHandSlot: whichever
--- of them is equipped occupies that slot exclusively.
+-- Inventory slot(s) each equip location is compared against. Finger and
+-- Trinket map to both physical slots.
 local EQUIP_LOC_TO_INVENTORY_SLOTS = {
   INVTYPE_HEAD = { "HeadSlot" },
   INVTYPE_NECK = { "NeckSlot" },
@@ -60,18 +56,14 @@ local EQUIP_LOC_TO_INVENTORY_SLOTS = {
   INVTYPE_RELIC = { "SecondaryHandSlot" },
 }
 
--- Every physical equipment slot, for the #28 debug dump - not otherwise
--- iterated over as a group, since IsUpgradeOverEquipped only looks up the
--- specific slot(s) an item's equipLoc maps to.
+-- Every physical equipment slot, for the debug dumps (#28).
 local ALL_INVENTORY_SLOTS = {
   "HeadSlot", "NeckSlot", "ShoulderSlot", "BackSlot", "ChestSlot", "WaistSlot",
   "LegsSlot", "FeetSlot", "WristSlot", "HandsSlot", "Finger0Slot", "Finger1Slot",
   "Trinket0Slot", "Trinket1Slot", "MainHandSlot", "SecondaryHandSlot",
 }
 
--- Returns the equipped item's level, its link, and the slot's numeric ID -
--- the link/ID are only for #28's debug dump, which needs to show what's
--- actually equipped, not just the number IsUpgradeOverEquipped computes.
+-- Returns the equipped item's level, link and slot ID (link/ID for #28).
 local function GetEquippedItemLevel(slotName)
   local slotID = GetInventorySlotInfo(slotName)
   if not slotID then
@@ -81,21 +73,16 @@ local function GetEquippedItemLevel(slotName)
   if not link then
     return 0, nil, slotID
   end
-  local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)
+  local level = C_Item.GetDetailedItemLevelInfo(link)
   if not level then
     level = select(4, C_Item.GetItemInfo(link))
   end
   return level or 0, link, slotID
 end
 
--- The equipped item level an equip location's candidates are compared
--- against: the lower of the two equipped items for dual-slot types
--- (finger/trinket), the one equipped item otherwise. A slot that's
--- genuinely empty (never equipped anything, e.g. a caster's off-hand)
--- falls back to the character's overall average equipped item level
--- rather than 0 (#36) - confirmed live that an ilvl 15 off-hand item
--- otherwise "won" against nothing, when it's obviously not a real
--- upgrade for a character wearing ilvl ~290 everywhere else.
+-- The equipped item level candidates are compared against: the lower of
+-- the two for finger/trinket. An empty slot falls back to the average
+-- equipped item level rather than 0 (#36).
 function Upgrade:GetBaselineItemLevel(equipLoc)
   local slots = EQUIP_LOC_TO_INVENTORY_SLOTS[equipLoc]
   if not slots then
@@ -111,7 +98,7 @@ function Upgrade:GetBaselineItemLevel(equipLoc)
   end
   baseline = baseline or 0
 
-  if baseline == 0 and GetAverageItemLevel then
+  if baseline == 0 then
     local _, avgEquipped = GetAverageItemLevel()
     baseline = avgEquipped or 0
   end
@@ -119,12 +106,7 @@ function Upgrade:GetBaselineItemLevel(equipLoc)
   return baseline
 end
 
--- True when the item's own level beats the equipped item it would actually
--- replace (see GetBaselineItemLevel). This is the actual "is it an
--- upgrade" check (#16) - IsUsable/IsSpecAppropriate alone only say the
--- item is wearable, not that it's better than current gear (confirmed
--- live: an ilvl ~100-141 quest reward otherwise passed those checks and
--- was wrongly listed against ilvl 238 equipped gear).
+-- True when the item's level beats the equipped item it would replace (#16).
 function Upgrade:IsUpgradeOverEquipped(item)
   local baseline = self:GetBaselineItemLevel(item.equipLoc)
   if baseline == nil then
@@ -133,9 +115,7 @@ function Upgrade:IsUpgradeOverEquipped(item)
   return (item.itemLevel or 0) > baseline
 end
 
--- #28 debug dump: every equipment slot's currently-equipped item and level,
--- so a live report can be compared directly against what Upgrade mode is
--- (or isn't) treating as an upgrade.
+-- Debug dump (#28): every slot's equipped item and level.
 function Upgrade:DumpEquippedSlots()
   ns.Print("Equipped item levels:")
   for _, slotName in ipairs(ALL_INVENTORY_SLOTS) do
@@ -144,9 +124,7 @@ function Upgrade:DumpEquippedSlots()
   end
 end
 
--- #28 debug dump: re-runs the exact same candidate/select pipeline the
--- sweep window's Upgrade mode uses, printing each selected item alongside
--- the equipped item level it was actually compared against.
+-- Debug dump (#28): Upgrade mode's selections and their baselines.
 function Upgrade:DumpSelectedUpgrades()
   local scanned = ns.Scanner:ScanAll()
   local candidates = {}
@@ -167,9 +145,7 @@ function Upgrade:DumpSelectedUpgrades()
   end
 end
 
--- #35 debug helper: finds an equipped item by case-insensitive substring,
--- for comparing a known-bound/known-usable item's C_Item.IsUsableItem
--- result against the false readings seen for unbound Warband Bank items.
+-- Debug helper (#35): finds an equipped item by name substring.
 function Upgrade:FindEquippedLink(query)
   for _, slotName in ipairs(ALL_INVENTORY_SLOTS) do
     local slotID = GetInventorySlotInfo(slotName)
@@ -184,10 +160,7 @@ function Upgrade:FindEquippedLink(query)
   return nil
 end
 
--- True when a two-hand weapon currently occupies the main hand. Used by
--- SelectBest to score the two-hand/one-hand+offhand decision (#37) -
--- not a hard gate in IsCandidate, since a class that can go either way
--- might have a one-hand+offhand combo worth switching to.
+-- True when a two-hand weapon occupies the main hand (#37).
 local function IsMainHandTwoHanded()
   local slotID = GetInventorySlotInfo("MainHandSlot")
   local link = slotID and GetInventoryItemLink("player", slotID)
@@ -197,14 +170,9 @@ local function IsMainHandTwoHanded()
   return select(9, C_Item.GetItemInfo(link)) == "INVTYPE_2HWEAPON"
 end
 
--- Whether the character can actually use the item: class/armor/weapon
--- proficiency (#35 - a hand-maintained table, since no live signal covers
--- this for Warband Bank items), the tooltip's own requirement-line
--- "usable" flag (level/reputation/quest gates, #8/#15), whether it's
--- relevant to the current spec, and whether it's actually better than
--- what's equipped. Off-hand-slot items are not excluded just because a
--- two-hander is currently equipped (#37) - SelectBest decides whether
--- switching to a one-hand+offhand combo is actually worth it.
+-- Proficient (#35), usable (#15), spec-appropriate, and better than what's
+-- equipped. Off-hands stay eligible under an equipped two-hander;
+-- SelectBest decides (#37).
 function Upgrade:IsCandidate(item)
   if not RELEVANT_QUALITIES[item.quality] then
     return false
@@ -243,32 +211,16 @@ local function TopTwo(list)
   return sorted[1], sorted[2]
 end
 
--- Two-hand vs. one-hand+offhand (#37), factored out of SelectBest so
--- DumpWeaponComparison (#39) can report the exact same computation
--- rather than a separate, driftable copy of it. Scored as the average
--- item level across both weapon slots - a two-hander counts as filling
--- both at its own level - and compared against the average of what's
--- actually equipped right now, so a hybrid class that can genuinely go
--- either way gets whichever option is actually better, not a rule that
--- always favors one shape over the other.
+-- Two-hand vs. one-hand+offhand (#37), shared with DumpWeaponComparison
+-- (#39). Scored as the average item level across both weapon slots,
+-- against what's equipped now. A two-hander fills both slots at its own
+-- level, matching how GetAverageItemLevel counts it.
 --
--- Confirmed live via GetAverageItemLevel: Blizzard's own average item
--- level counts a two-hand weapon TWICE - once per weapon slot - so a
--- lone one-hand candidate with no off-hand really is only worth half its
--- own level in this comparison, not a direct match against a two-hander.
--- Swapping a 253 two-hander for a bare 253 one-hand weapon dropped
--- overall average item level by 17 (275.25 -> 259.50) even though the
--- weapon itself barely changed - the empty off-hand slot is a real loss,
--- not a wash, since it was effectively "filled" by the two-hander's own
--- value before.
---
--- Returns a table: bestTwoHand, bestMainHand, bestOffHand (candidates,
--- any may be nil - bestOffHand is forced nil when a two-hander is
--- equipped and no main-hand candidate exists to pair it with, since the
--- off-hand slot is physically blocked in that case), equippedTwoHand,
--- equippedMainLevel, equippedOffLevel, currentAverage, twoHandAverage,
--- oneHandAverage (any of the last two may be nil if no candidate was
--- found), and winner ("current", "twoHand", or "oneHand").
+-- Returns bestTwoHand, bestMainHand, bestOffHand (any may be nil;
+-- bestOffHand is nil under an equipped two-hander with no main-hand
+-- candidate), equippedTwoHand, equippedMainLevel, equippedOffLevel,
+-- currentAverage, twoHandAverage, oneHandAverage (last two nilable), and
+-- winner ("current", "twoHand", or "oneHand").
 local function DecideWeapons(twoHand, mainHand, offHand)
   local bestTwoHand = BestOf(twoHand)
   local bestMainHand = BestOf(mainHand)
@@ -310,11 +262,8 @@ local function DecideWeapons(twoHand, mainHand, offHand)
   }
 end
 
--- Given an already-filtered candidate set (see IsCandidate), returns the
--- items to pre-check as "the" upgrade pick for each slot: the single
--- highest item level per slot, except rings/trinkets (top two distinct
--- items) and the two-hand/one-hand+offhand pair (whichever combination
--- scores higher as a set, never both at once - see DecideWeapons).
+-- The items to pre-check from a filtered candidate set: highest item level
+-- per slot, top two for rings/trinkets, and the winning weapon set.
 function Upgrade:SelectBest(candidates)
   local buckets = {}
   local twoHand, mainHand, offHand = {}, {}, {}
@@ -356,10 +305,7 @@ function Upgrade:SelectBest(candidates)
   return selected
 end
 
--- #39 debug dump: the exact weapon-slot comparison DecideWeapons computed
--- - equipped state, both options' scores, and which won - so a
--- discrepancy can be diagnosed from the numbers directly instead of
--- needing character-pane screenshots.
+-- Debug dump (#39): DecideWeapons' inputs, scores and winner.
 function Upgrade:DumpWeaponComparison()
   local scanned = ns.Scanner:ScanAll()
   local twoHand, mainHand, offHand = {}, {}, {}

@@ -3,23 +3,16 @@ local ADDON_NAME, ns = ...
 local Scanner = {}
 ns.Scanner = Scanner
 
--- Character bags: 0 is the backpack, 1-4 are equipped bag slots. Bag 5 is
--- the Reagent Bag - crafting materials only, never gear - and is
--- deliberately excluded.
+-- Backpack (0) and equipped bags (1-4). The Reagent Bag (5) never holds gear.
 local CHARACTER_BAG_IDS = { 0, 1, 2, 3, 4 }
 
--- Seconds WithdrawToBags waits for a move to confirm before giving up.
--- Warband Bank moves round-trip through the server; the original 1s
--- window was confirmed live to be too short for them (#42).
+-- Seconds WithdrawToBags waits for a move to confirm. Warband Bank moves
+-- round-trip through the server; 1s was too short (#42).
 local WITHDRAW_TIMEOUT = 3
 
--- Real wearable-gear equip slots. An allowlist rather than a blacklist:
--- confirmed live (#8) that C_Item.GetItemInfo's 9th return value is a real,
--- non-empty sentinel string for plenty of non-gear items too (e.g. a
--- potion returns "INVTYPE_NON_EQUIP_IGNORE"), so excluding just a couple of
--- known-bad values let everything else - potions, quest tokens, the
--- Hearthstone - through. Deliberately excludes INVTYPE_BODY (shirt) and
--- INVTYPE_TABARD per spec, and INVTYPE_BAG (bags themselves aren't gear).
+-- Wearable-gear equip slots, as an allowlist: non-gear items also return a
+-- non-empty equipLoc (e.g. "INVTYPE_NON_EQUIP_IGNORE" for potions, #8).
+-- Excludes shirts, tabards and bags.
 local EQUIPPABLE_SLOTS = {
   INVTYPE_HEAD = true,
   INVTYPE_NECK = true,
@@ -46,37 +39,20 @@ local EQUIPPABLE_SLOTS = {
   INVTYPE_RELIC = true,
 }
 
--- Enumerates every purchased bank tab across every currently-viewable bank
--- type (character bank, Warband/Account bank, ...) rather than hardcoding
--- bag IDs, so it keeps working as more tabs get purchased. Confirmed live
--- via C_Bank.FetchViewableBankTypes/FetchPurchasedBankTabIDs (#8): there is
--- no separate legacy bank container (negative bag indices are all empty),
--- every bank tab is an ordinary bag index, split across two bank types.
+-- Every purchased tab of every viewable bank type. Bank tabs are ordinary
+-- bag indices (#8). WoW Forever has no Warband Bank and only lists the
+-- Character type.
 local function GetBankLocations()
-  local locations = {}
-  if not (C_Bank and C_Bank.FetchViewableBankTypes) then
-    return locations
-  end
-
   local bankTypeNames = {}
-  if Enum and Enum.BankType then
-    for name, value in pairs(Enum.BankType) do
-      bankTypeNames[value] = name
-    end
+  for name, value in pairs(Enum.BankType) do
+    bankTypeNames[value] = name
   end
 
-  local ok, bankTypes = pcall(C_Bank.FetchViewableBankTypes)
-  if not ok or not bankTypes then
-    return locations
-  end
-
-  for _, bankType in ipairs(bankTypes) do
+  local locations = {}
+  for _, bankType in ipairs(C_Bank.FetchViewableBankTypes()) do
     local label = bankTypeNames[bankType] or ("Bank type " .. tostring(bankType))
-    local okIDs, tabIDs = pcall(C_Bank.FetchPurchasedBankTabIDs, bankType)
-    if okIDs and tabIDs then
-      for _, bagID in ipairs(tabIDs) do
-        table.insert(locations, { bagID = bagID, source = label })
-      end
+    for _, bagID in ipairs(C_Bank.FetchPurchasedBankTabIDs(bankType)) do
+      table.insert(locations, { bagID = bagID, source = label })
     end
   end
 
@@ -113,14 +89,12 @@ function Scanner:ScanAll()
         local name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID, subclassID =
           C_Item.GetItemInfo(info.hyperlink)
         if equipLoc and EQUIPPABLE_SLOTS[equipLoc] then
-          local detailedLevel = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(info.hyperlink)
+          local detailedLevel = C_Item.GetDetailedItemLevelInfo(info.hyperlink)
           table.insert(items, {
             bagID = bagID,
             slot = slot,
-            -- info.hyperlink (not GetItemInfo's returned link) so
-            -- Classify.lua reads this exact instance's bonus IDs
-            -- (upgrade track/level) rather than whatever generic link
-            -- GetItemInfo cached the first time this item was seen.
+            -- The container's link carries this instance's bonus IDs
+            -- (upgrade track); GetItemInfo's returned link may not.
             hyperlink = info.hyperlink,
             name = name,
             quality = quality,
@@ -131,8 +105,7 @@ function Scanner:ScanAll()
             subclassID = subclassID,
             isBound = info.isBound,
             source = location.source,
-            -- Already in the character's bags: Pull Selected leaves it
-            -- where it is rather than shuffling it to another bag slot (#43).
+            -- Pull Selected leaves items already in bags where they are (#43).
             inBags = location.inBags or false,
           })
         end
@@ -144,36 +117,17 @@ function Scanner:ScanAll()
   return items
 end
 
--- Moves one item from a bag/bank slot into the first empty bag slot, using
--- the classic pickup-cursor/place-cursor pattern (#7): the same mechanism
--- works uniformly across bags, bank, and Warband Bank tabs, since bank tabs
--- are ordinary bag indices (see #8's findings).
+-- Moves one item from a bag/bank slot into the first empty bag slot via
+-- pickup/place (#7); bank tabs are ordinary bag indices.
 --
--- Asynchronous (#41, confirmed live via debug trace): CursorHasItem and
--- GetContainerItemInfo both still read pre-transaction state immediately
--- after the PickupContainerItem calls return - even a slot's own "did the
--- pickup empty it" check read stale - so a synchronous return right after
--- issuing them let a second withdrawal, issued as soon as the first
--- returned, compute an empty-slot scan against data that hadn't caught up
--- yet, sending both items to the same slot. Waiting for ITEM_LOCK_CHANGED
--- (the same signal other addons doing bulk container moves wait on, e.g.
--- Fence's batch auction module) before trusting these reads again is the
--- actual fix; a short timeout is a safety net in case that event doesn't
--- fire for some edge case, so a pull can never hang indefinitely.
+-- Asynchronous: container and cursor state read stale right after the
+-- pickup calls (#41). Each ITEM_LOCK_CHANGED/BAG_UPDATE_DELAYED re-checks
+-- the destination, and only the item sitting there unlocked counts as
+-- success (#42). A timeout keeps a pull from hanging.
 --
--- The first ITEM_LOCK_CHANGED isn't the end of the move, though (#42,
--- confirmed live via debug trace): Warband Bank withdrawals go through the
--- server, and settling on the first lock event (or a 1s timeout) counted
--- moves as done while the destination slot still read empty. The next
--- withdrawal then picked that same slot, and when both moves landed the
--- items swapped, sending one back into the bank. Each lock/bag event now
--- re-checks whether the destination actually holds the item, unlocked, and
--- only that counts as success.
---
--- `reserved` (optional) is a set of "bag:slot" keys already claimed by
--- earlier withdrawals in the same pull. The empty-slot scan skips them and
--- this call adds its own destination, so two in-flight moves can never
--- target the same slot even if container state hasn't caught up yet.
+-- `reserved` (optional) is a set of "bag:slot" keys claimed by earlier
+-- withdrawals in the same pull; the scan skips them and this call adds its
+-- own destination, so in-flight moves never share a slot.
 --
 -- Calls callback(true) on success, or callback(false, reason) on failure.
 function Scanner:WithdrawToBags(bagID, slot, callback, reserved)
@@ -182,13 +136,7 @@ function Scanner:WithdrawToBags(bagID, slot, callback, reserved)
     return
   end
 
-  -- The results list is built from a scan that can be seconds old by the
-  -- time Pull Selected runs each row (#25): the item may have already been
-  -- moved, or the source slot may no longer be reachable at all (the bank
-  -- was closed, or the player disconnected mid-pull). Confirming the item
-  -- is still there before touching the cursor turns that into a clear,
-  -- reported skip instead of a pickup call that does nothing or leaves the
-  -- cursor holding nothing useful.
+  -- The scan may be stale: the item moved or the bank closed (#25).
   if not C_Container.GetContainerItemInfo(bagID, slot) then
     callback(false, "item is no longer there")
     return
@@ -228,9 +176,7 @@ function Scanner:WithdrawToBags(bagID, slot, callback, reserved)
     callback(ok, reason)
   end
 
-  -- timedOut: the safety net fired rather than an event. A destination that
-  -- holds the item but still reads locked is accepted then, rather than
-  -- reported as failed for an item that's sitting in the bag.
+  -- On timeout, a destination holding the item is accepted even if locked.
   local function Check(timedOut)
     if settled then return end
 
@@ -242,20 +188,15 @@ function Scanner:WithdrawToBags(bagID, slot, callback, reserved)
       tostring(dest ~= nil and dest.isLocked == true))
 
     if stillHolding then
-      -- The destination slot wasn't actually empty once the transaction
-      -- settled - put the item back rather than leave the cursor stuck
-      -- holding it, which would otherwise cascade into every later
-      -- withdrawal in the same pull failing with "cursor is already
-      -- holding something". The slot is released since nothing is headed
-      -- there.
+      -- The destination wasn't empty after all: put the item back so the
+      -- cursor doesn't block later withdrawals, and release the slot.
       C_Container.PickupContainerItem(bagID, slot)
       if reserved then reserved[destKey] = nil end
       Finish(false, "failed to place item")
     elseif landed then
       Finish(true)
     elseif timedOut then
-      -- The move may still complete later, so the slot stays reserved for
-      -- the rest of the pull; it just can't be counted as pulled.
+      -- The move may still land, so the slot stays reserved.
       Finish(false, "move not confirmed")
     end
     -- Otherwise still in flight: keep waiting for the next event.

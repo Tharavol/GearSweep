@@ -242,13 +242,16 @@ local function resetScannerMocks()
   C_Container.GetContainerItemInfo = function() return nil end
   C_Item.GetItemInfo = function() return nil end
   C_Item.GetDetailedItemLevelInfo = function() return nil end
-  C_Bank = nil
-  Enum.BankType = nil
+  C_Bank = {
+    FetchViewableBankTypes = function() return {} end,
+    FetchPurchasedBankTabIDs = function() return {} end,
+  }
+  Enum.BankType = { Character = 0, Account = 2 }
 end
 
 do
-  -- No bank purchased/open (C_Bank absent entirely on some clients): only
-  -- the 5 character bag IDs are scanned, backpack plus the 4 equipped bags.
+  -- No bank tabs purchased: only the 5 character bag IDs are scanned,
+  -- backpack plus the 4 equipped bags.
   local locations = ns.Scanner:GetLocations()
   equals(#locations, 5, "with no bank, only the character's bags are locations")
   for i, bagID in ipairs({ 0, 1, 2, 3, 4 }) do

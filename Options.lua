@@ -3,10 +3,8 @@ local ADDON_NAME, ns = ...
 --------------------------------------------------------------------------
 -- Options panel
 --
--- Filter defaults/values live entirely in the sweep window itself (#12,
--- #17) - persisted per mode in ns.db.disenchant/ns.db.upgrade already, so
--- there's nothing to duplicate here. This panel just holds the toggles
--- that don't belong to any one mode: auto-open and debug logging (#20).
+-- Filters live in the sweep window (#12, #17); this panel holds only the
+-- mode-independent toggles: auto-open and debug logging (#20).
 --------------------------------------------------------------------------
 
 local Options = {}
@@ -47,8 +45,6 @@ local function CreatePanel()
   return panel
 end
 
--- Registered once at load: the category needs to exist for the Settings
--- window to list it any time the player opens it.
 function Options:Register()
   local panel = CreatePanel()
   local category = Settings.RegisterCanvasLayoutCategory(panel, ADDON_NAME)
@@ -56,11 +52,8 @@ function Options:Register()
   self.category = category
 end
 
--- Opens the Settings window straight to this panel, e.g. from /gs options.
 function Options:Open()
-  if self.category then
-    Settings.OpenToCategory(self.category:GetID())
-  end
+  Settings.OpenToCategory(self.category:GetID())
 end
 
 Options:Register()

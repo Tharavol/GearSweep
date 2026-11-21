@@ -2,7 +2,40 @@
 
 All notable changes to GearSweep are documented in this file.
 
+## Summary
+
+Sweeps your bags, bank and Warband Bank for gear to disenchant or wear.
+Disenchant mode filters for Uncommon/Rare/Epic equipment that's
+Adventurer-tier and/or from a previous season, ignoring non-gear whites like
+shirts and tabards, with independent toggles for quality, slot, item level
+range, and Adventurer-tier/previous-season inclusion. Upgrade mode instead
+filters for equipment your character can actually use - checked against
+class/armor/weapon proficiency and Blizzard's own "Best in Slot"
+spec-relevance signal - that's also a genuine item-level upgrade over what's
+currently equipped (or your average equipped item level, for a slot that's
+never been filled), then pre-checks the single highest-item-level candidate
+per slot (top two for dual-slot rings/trinkets; two-hand weapons and
+one-hand+offhand pairs are scored as a pair so both never get pre-checked
+together - whichever has the higher average item level wins). "Pull
+Selected" moves every checked item into your bags; GearSweep never
+disenchants or sells anything on its own. The sweep window opens
+automatically when you visit your bank or Warband Bank (toggle with /gs
+autoopen or the options panel). Configure under Options > AddOns > GearSweep
+or with /gs (alias /gearsweep); /gs options opens the settings panel, /gs
+debug turns on diagnostic logging (plus `slots`/`upgrades`/`weapons`/`item <name>`
+sub-dumps), /gs status shows current settings, and /gs help lists every
+command. Source, issues and release notes:
+https://github.com/Tharavol/GearSweep
+
 ## [Unreleased]
+
+### Internal
+- Removed existence checks for `C_TooltipInfo`, `C_Item`, `C_Bank`,
+  `C_AddOns` and `Enum.BankType`, the `pcall`s around the `C_Bank` tab
+  queries, and the dead `GetAddOnMetadata`/`ITEM_QUALITY_COLORS`
+  fallbacks (#44).
+- Trimmed comments that recounted investigations, and moved the TOC
+  `X-ReleaseNotes` summary into this file (#45).
 
 ## [1.0.1] - 2026-10-19
 

@@ -27,10 +27,8 @@ local SLOT_GROUPS = {
   { id = "FEET", label = "Feet", equipLocs = { "INVTYPE_FEET" } },
   { id = "FINGER", label = "Finger", equipLocs = { "INVTYPE_FINGER" } },
   { id = "TRINKET", label = "Trinket", equipLocs = { "INVTYPE_TRINKET" } },
-  -- INVTYPE_WEAPONOFFHAND (a literal off-hand weapon, for dual-wielders)
-  -- groups with Off Hand, not Weapon: it's indistinguishable from a
-  -- main-hand item by label otherwise, confirmed live to cause exactly
-  -- that confusion when reading the results list.
+  -- INVTYPE_WEAPONOFFHAND groups with Off Hand so it is distinguishable
+  -- from main-hand weapons in the results list.
   { id = "WEAPON", label = "Weapon", equipLocs = {
       "INVTYPE_WEAPON", "INVTYPE_2HWEAPON", "INVTYPE_WEAPONMAINHAND",
       "INVTYPE_RANGED", "INVTYPE_RANGEDRIGHT", "INVTYPE_THROWN",
@@ -47,19 +45,11 @@ for _, group in ipairs(SLOT_GROUPS) do
   end
 end
 
--- Tries the modern color API first, falls back to the long-standing global
--- table, and finally plain white - cosmetic only, never worth erroring on.
--- Confirmed live: C_Item.GetItemQualityColor returns plain r, g, b (...)
--- numbers directly, not a color table/object.
+-- C_Item.GetItemQualityColor returns plain r, g, b numbers, not a color
+-- object. White for an unknown quality.
 local function GetQualityColor(quality)
-  if C_Item and C_Item.GetItemQualityColor then
-    local r, g, b = C_Item.GetItemQualityColor(quality)
-    if r then return r, g, b end
-  end
-  if ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality] then
-    local c = ITEM_QUALITY_COLORS[quality]
-    return c.r, c.g, c.b
-  end
+  local r, g, b = C_Item.GetItemQualityColor(quality)
+  if r then return r, g, b end
   return 1, 1, 1
 end
 
@@ -120,9 +110,7 @@ local function PassesUpgradeFilters(item, filters)
   return PassesCommonFilters(item, filters)
 end
 
--- Exposed for the offline test suite (#23), which can't drive these through
--- UI:Refresh without a full frame/template environment; production code
--- keeps calling the local functions above directly.
+-- Exposed for the offline test suite (#23).
 UI.PassesCommonFilters = PassesCommonFilters
 UI.PassesDisenchantFilters = PassesDisenchantFilters
 UI.PassesUpgradeFilters = PassesUpgradeFilters
@@ -143,8 +131,7 @@ local disenchantModeCheckbox, upgradeModeCheckbox
 local PADDING = 16
 local LABEL_COLUMN = 100
 
--- "disenchant" or "upgrade" (#17). Not persisted - the panel always opens
--- on Disenchant, matching v0.3.0's behavior for players who never switch.
+-- "disenchant" or "upgrade" (#17). Not persisted: opens on Disenchant.
 local currentMode = "disenchant"
 
 local function BuildFilters()
@@ -167,9 +154,8 @@ local function GetOrCreateRow(index)
   row:SetSize(560, ROW_HEIGHT)
   row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
 
-  -- SetBagItem (not SetHyperlink) so hovering a row shows exactly the same
-  -- tooltip - including Blizzard's automatic equipped-item comparison
-  -- pane - as hovering the item directly in bags/bank (#33).
+  -- SetBagItem (not SetHyperlink) so the tooltip includes the equipped-item
+  -- comparison, as when hovering the item in bags/bank (#33).
   row:EnableMouse(true)
   row:SetScript("OnEnter", function(self)
     if not self.item then return end
@@ -211,18 +197,15 @@ local function GetOrCreateRow(index)
 end
 
 -- Re-scans and re-populates the results list from current filter values.
--- In upgrade mode, every candidate is listed but only the best-per-slot
--- picks (#16) start checked - #17 asks that the rest stay visible and
--- selectable, not hidden, so the player can still grab a runner-up by hand.
+-- In upgrade mode every candidate is listed, but only the best-per-slot
+-- picks (#16) start checked (#17).
 function UI:Refresh()
   local filters = BuildFilters()
   local items = ns.Scanner:ScanAll()
   local shown = 0
 
-  -- Deliberately not `(currentMode == "upgrade") and X or Y`: when X is
-  -- false (the common case - most scanned items aren't upgrades), that
-  -- idiom falls through to Y instead of staying false, silently letting
-  -- disenchant-eligible junk back into the Upgrade mode results (#31).
+  -- Not `cond and X or Y`: X is usually false, which would fall through to
+  -- the disenchant filter (#31).
   local matching = {}
   for _, item in ipairs(items) do
     local ok
@@ -288,16 +271,9 @@ local function SetAllChecked(checked)
   end
 end
 
--- Withdrawals are issued one at a time, each waiting for the previous one
--- to actually confirm (see Scanner:WithdrawToBags), rather than firing them
--- all in a single synchronous loop (#41, confirmed live: a 2-item pull
--- reported "Pulled 2 item(s)" but only 1 actually arrived, because the
--- client's own container state doesn't reflect a just-issued pickup/place
--- pair by the very next line of Lua).
---
--- Checked items already in the character's bags are left where they are
--- (#43): moving them to another bag slot achieves nothing and only adds
--- more moves that can collide.
+-- Withdrawals run one at a time, each waiting for the previous one to
+-- confirm (#41; see Scanner:WithdrawToBags). Checked items already in bags
+-- are left in place (#43).
 local function PullSelected()
   local queue = {}
   local alreadyInBags = 0
@@ -314,9 +290,7 @@ local function PullSelected()
   local moved, failed, skipped = 0, 0, 0
   local skipReason
   local index = 0
-  -- Destination slots claimed by this pull's withdrawals (#42), shared
-  -- across every WithdrawToBags call so none can reuse a slot whose move
-  -- hasn't shown up in container state yet.
+  -- Destination slots claimed by this pull's withdrawals (#42).
   local reserved = {}
 
   local function Finish()
@@ -353,9 +327,7 @@ local function PullSelected()
           row.item.name or row.item.hyperlink, row.item.source or "?", row.item.bagID, row.item.slot)
         ProcessNext()
       elseif reason == "bags full" then
-        -- Bag space can't free up mid-queue (#25): every remaining queued
-        -- item would fail exactly the same way, so they're counted as
-        -- not-pulled directly instead of repeating the same failing scan.
+        -- Bag space can't free up mid-queue, so the rest would fail too (#25).
         failed = failed + (#queue - index + 1)
         ns.Debug("Stopped: bags are full")
         Finish()
@@ -371,22 +343,16 @@ local function PullSelected()
   ProcessNext()
 end
 
--- Exposed for the offline test suite (#25), which can't build a real rows
--- list without the frame templates CreatePanel needs; production code never
--- calls these itself.
+-- Exposed for the offline test suite (#25).
 UI.PullSelected = PullSelected
 function UI:SetRowsForTesting(list) rows = list end
 
--- Fixed row height every section below uses, so a section's total height
--- is always (rows * ROW_STEP), computable up front instead of guessed.
+-- Fixed row height for every filter section.
 local ROW_STEP = 24
 
--- Checkboxes are created once, then positioned separately (PositionXxx
--- below) so a section's collapse toggle (#32) can re-run just the layout
--- pass without recreating any frames. Positions are always explicit (x, y)
--- offsets from `frame` directly, never chained off a previous element's
--- BOTTOMLEFT - that chaining was what produced guessed, wrong gaps
--- between sections.
+-- Checkboxes are created once and positioned separately, so a collapse
+-- toggle (#32) only re-runs layout. Positions are explicit offsets from
+-- `frame`, not chained off the previous element.
 
 local function CreateQualityCheckboxes(parent)
   local checkboxes = {}
@@ -402,9 +368,7 @@ local function CreateQualityCheckboxes(parent)
   return checkboxes
 end
 
--- Repositions the (already-created) quality checkboxes and returns the
--- bottom Y of the section, so the caller can lay out whatever comes next
--- without guessing how many rows it took.
+-- Positions the quality checkboxes; returns the section's bottom Y.
 local function PositionQualityCheckboxes(x, yTop)
   for i, def in ipairs(QUALITY_FILTERS) do
     qualityCheckboxes[def.quality]:SetPoint("TOPLEFT", frame, "TOPLEFT", x, yTop - (i - 1) * ROW_STEP)
@@ -473,17 +437,12 @@ local function CreatePanel()
   frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
   frame:Hide()
 
-  -- Without an explicit strata this defaults to "MEDIUM", below the
-  -- bag/bank container frames it's meant to be used alongside (#30) -
-  -- confirmed live: with bags and the Warband Bank open, GearSweep
-  -- rendered interleaved with them, with other addons' UI showing through
-  -- in the gaps. "HIGH" plus SetToplevel matches those windows and raises
-  -- this one on click, same as they do.
+  -- The default "MEDIUM" strata renders interleaved with open bag/bank
+  -- frames (#30); "HIGH" plus SetToplevel matches them.
   frame:SetFrameStrata("HIGH")
   frame:SetToplevel(true)
 
-  -- Registers this frame with Blizzard's default UI so Escape closes it
-  -- like any other standard window (#29).
+  -- Escape closes it (#29).
   tinsert(UISpecialFrames, "GearSweepFrame")
 
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -594,21 +553,13 @@ local function CreatePanel()
   end)
 end
 
--- Repositions everything below the Mode row from scratch (#32): called on
--- every mode switch and every section collapse/expand toggle. Most widgets
--- below the sections chain off each other via relative anchors (Select
--- All/None off Refresh, statusText off Refresh, the scroll frame off
--- statusText) and never need repositioning directly - only each section's
--- own header/body and the two explicitly `frame`-anchored rows after them
--- (Item Level, Refresh) do.
+-- Repositions everything below the Mode row (#32), on every mode switch
+-- and collapse toggle. Widgets below Refresh anchor off it and follow.
 function UI:RelayoutFrame()
   local y = -32 - ROW_STEP - 10
 
-  -- A collapsed section still occupies its own header row - only the
-  -- checkbox rows below it disappear - so `y` always drops by at least
-  -- ROW_STEP here, via PositionXxxCheckboxes when expanded (its first row
-  -- shares the header's row) or explicitly when collapsed. Omitting the
-  -- explicit drop was why collapsing a section overlapped the next one.
+  -- A collapsed section still occupies its header row, so `y` drops by at
+  -- least ROW_STEP either way.
   qualityHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
   UpdateSectionHeaderText(qualityHeader)
   local qualityCollapsed = ns.db.uiCollapsed.quality

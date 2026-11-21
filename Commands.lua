@@ -3,10 +3,7 @@ local ADDON_NAME, ns = ...
 --------------------------------------------------------------------------
 -- Slash command dispatch: /gearsweep (alias /gs)
 --
--- A table of { name, help, handler } rather than an if-chain, so
--- PrintUsage is derived from the same data Dispatch uses instead of a
--- second hand-maintained command list that could drift out of sync
--- (matches ShoppingConverter/Commands.lua and Crosshairs/Slash.lua).
+-- PrintUsage and Dispatch share one { name, help, handler } table.
 --------------------------------------------------------------------------
 
 local Commands = {}
@@ -15,14 +12,10 @@ ns.Commands = Commands
 local function OpenSweep() ns.UI:Show() end
 local function OpenOptions() ns.Options:Open() end
 
--- Forward-declared so the "help" entry below can close over it before its
--- body (which needs COMMANDS to exist) is assigned further down.
+-- Forward-declared: the "help" entry needs it, and it needs COMMANDS.
 local PrintUsage
 
--- "config" and "gui" are silent aliases of "options": each opens the
--- settings panel but carries no help text of its own, so PrintUsage
--- doesn't repeat the same line three times. The bare command opens the
--- main sweep window instead - that's the addon's actual feature.
+-- "config" and "gui" are silent aliases of "options" (no help lines).
 local COMMANDS = {
   {
     name = "",
@@ -79,8 +72,7 @@ local COMMANDS = {
           return
         end
 
-        -- Not in bags/bank - try equipped slots (#35: comparing a
-        -- known-bound item's IsUsableItem result against unbound ones).
+        -- Not in bags/bank: try equipped slots (#35).
         local equippedLink, slotName = ns.Upgrade:FindEquippedLink(query)
         if equippedLink then
           ns.Print("Equipped in %s.", slotName)

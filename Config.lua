@@ -1,17 +1,7 @@
 local ADDON_NAME, ns = ...
 
--- Applied onto GearSweepDB by Core.lua on ADDON_LOADED for any key a saved
--- profile doesn't already have, so new settings get a default without
--- clobbering what a player already configured.
---
--- excludedQualities/excludedSlotGroups default empty (nothing excluded)
--- rather than listing every quality/slot as "true": it means UI.lua owns
--- the one canonical list of quality/slot-group values, instead of that
--- list being duplicated (and able to drift out of sync) here too.
--- Used wherever a default gets assigned into ns.db (initial merge, reset):
--- a plain `ns.db[key] = value` would copy a nested default table by
--- reference, so the first filter checkbox click would mutate
--- DEFAULT_SETTINGS itself and permanently corrupt what "reset" resets to.
+-- Used wherever a default is assigned into ns.db, so nested default tables
+-- are never shared with (and mutated through) the saved settings.
 function ns.DeepCopy(value)
   if type(value) ~= "table" then
     return value
@@ -23,15 +13,13 @@ function ns.DeepCopy(value)
   return copy
 end
 
+-- Merged into GearSweepDB on ADDON_LOADED for any missing key (Core.lua).
+-- Exclusion sets default empty; UI.lua owns the list of qualities/slots.
 ns.DEFAULT_SETTINGS = {
   debug = false,
-  -- Whether opening the bank/Warband Bank also opens the sweep window
-  -- (#19). Defaults on since that's the addon's whole reason to exist -
-  -- players who don't want it can turn it off in Options or via
-  -- `/gs autoopen off`.
+  -- Open the sweep window when the bank opens (#19).
   autoOpen = true,
-  -- Per-section collapse state for the sweep window's filter sections
-  -- (#32): all expanded by default, matching prior versions' fixed layout.
+  -- Per-section collapse state for the filter sections (#32).
   uiCollapsed = {
     quality = false,
     slot = false,

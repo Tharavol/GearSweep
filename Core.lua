@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
-ns.VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(ADDON_NAME, "Version") or "dev"
+ns.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "dev"
 
 function ns.Print(fmt, ...)
   local message = select("#", ...) > 0 and fmt:format(...) or fmt
@@ -29,9 +29,8 @@ frame:SetScript("OnEvent", function(self, event, addon)
   end
 end)
 
--- Confirmed live (#6): opening the bank fires BANKFRAME_OPENED regardless
--- of whether the player lands on the character bank or Warband Bank tab -
--- switching tabs within an already-open bank frame does not re-fire it.
+-- BANKFRAME_OPENED fires for either bank tab; switching tabs does not
+-- re-fire it (#6).
 local bankFrame = CreateFrame("Frame")
 bankFrame:RegisterEvent("BANKFRAME_OPENED")
 bankFrame:SetScript("OnEvent", function()

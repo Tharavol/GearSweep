@@ -30,11 +30,11 @@ read_globals = {
     "tinsert", "UISpecialFrames",
 
     -- Addon metadata
-    "GetAddOnMetadata", "GetBuildInfo", "IsAddOnLoaded",
+    "GetBuildInfo",
 
     -- Item/unit/spec queries
     "UnitClass", "UnitClassBase", "GetSpecialization", "GetSpecializationInfo", "CursorHasItem", "strtrim",
-    "ITEM_QUALITY_COLORS", "GetInventorySlotInfo", "GetInventoryItemLink", "GetAverageItemLevel",
+    "GetInventorySlotInfo", "GetInventoryItemLink", "GetAverageItemLevel",
 }
 
 -- The offline test harness installs its own WoW stubs into _G on purpose.
