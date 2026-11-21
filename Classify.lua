@@ -249,8 +249,8 @@ function Classify:IsSpecAppropriate(link)
   end
 
   local className = UnitClass("player")
-  local specIndex = GetSpecialization()
-  local specName = specIndex and select(2, GetSpecializationInfo(specIndex))
+  local specIndex = C_SpecializationInfo.GetSpecialization()
+  local specName = specIndex and select(2, C_SpecializationInfo.GetSpecializationInfo(specIndex))
   if not specName or not className then
     return true
   end

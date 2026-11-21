@@ -33,7 +33,7 @@ read_globals = {
     "GetBuildInfo",
 
     -- Item/unit/spec queries
-    "UnitClass", "UnitClassBase", "GetSpecialization", "GetSpecializationInfo", "CursorHasItem", "strtrim",
+    "UnitClass", "UnitClassBase", "C_SpecializationInfo", "CursorHasItem", "strtrim",
     "GetInventorySlotInfo", "GetInventoryItemLink", "GetAverageItemLevel",
 }
 

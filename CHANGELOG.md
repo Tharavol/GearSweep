@@ -29,6 +29,9 @@ https://github.com/Tharavol/GearSweep
 
 ## [Unreleased]
 
+### Added
+- Loads on World of Warcraft: Forever as well as retail: the TOC now lists Interface 16001. The Best-in-Slot spec check reads `C_SpecializationInfo`, since the global `GetSpecialization` functions are absent on Forever. Forever has no Warband Bank, so only the character bank is swept (#47).
+
 ### Internal
 - Removed existence checks for `C_TooltipInfo`, `C_Item`, `C_Bank`,
   `C_AddOns` and `Enum.BankType`, the `pcall`s around the `C_Bank` tab
@@ -36,6 +39,7 @@ https://github.com/Tharavol/GearSweep
   fallbacks (#44).
 - Trimmed comments that recounted investigations, and moved the TOC
   `X-ReleaseNotes` summary into this file (#45).
+- The daily TOC Interface check now tracks both the retail and WoW Forever versions, so its bump no longer rewrites the Interface line to retail only (#48).
 
 ## [1.0.1] - 2026-10-19
 

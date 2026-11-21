@@ -754,23 +754,23 @@ end
 do
   mockTooltipLines({ "Best in Slot", "Holy Paladin", "" })
   UnitClass = function() return "Paladin" end
-  GetSpecialization = function() return 1 end
-  GetSpecializationInfo = function() return nil, "Holy" end
+  C_SpecializationInfo.GetSpecialization = function() return 1 end
+  C_SpecializationInfo.GetSpecializationInfo = function() return nil, "Holy" end
   check(ns.Classify:IsSpecAppropriate("item:1"),
     "an item annotated for the player's actual class and spec is spec-appropriate")
 
-  GetSpecializationInfo = function() return nil, "Protection" end
+  C_SpecializationInfo.GetSpecializationInfo = function() return nil, "Protection" end
   check(not ns.Classify:IsSpecAppropriate("item:1"),
     "an item annotated only for a different spec of the same class is not spec-appropriate")
 
   UnitClass = function() return "Warrior" end
-  GetSpecializationInfo = function() return nil, "Holy" end
+  C_SpecializationInfo.GetSpecializationInfo = function() return nil, "Holy" end
   check(not ns.Classify:IsSpecAppropriate("item:1"),
     "an item annotated for the same spec name but a different class is not spec-appropriate")
 
   UnitClass = function() return nil end
-  GetSpecialization = function() return nil end
-  GetSpecializationInfo = function() return nil end
+  C_SpecializationInfo.GetSpecialization = function() return nil end
+  C_SpecializationInfo.GetSpecializationInfo = function() return nil end
 end
 
 --------------------------------------------------------------------------

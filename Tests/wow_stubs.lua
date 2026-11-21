@@ -84,8 +84,10 @@ function stubs.install(env)
   -- Tests override these per case to simulate the player's class/spec
   -- (Classify.lua's spec-relevance check, Classify:IsSpecAppropriate).
   env.UnitClass = function() return nil end
-  env.GetSpecialization = function() return nil end
-  env.GetSpecializationInfo = function() return nil end
+  env.C_SpecializationInfo = {
+    GetSpecialization = function() return nil end,
+    GetSpecializationInfo = function() return nil end,
+  }
 
   -- Real Blizzard item classification enums, for Classify.lua's class
   -- proficiency table (#35).
