@@ -27,7 +27,7 @@ sub-dumps), /gs status shows current settings, and /gs help lists every
 command. Source, issues and release notes:
 https://github.com/Tharavol/GearSweep
 
-## [Unreleased]
+## [1.1.0] - 2026-11-21
 
 ### Added
 - Loads on World of Warcraft: Forever as well as retail: the TOC now lists Interface 16001. The Best-in-Slot spec check reads `C_SpecializationInfo`, since the global `GetSpecialization` functions are absent on Forever. Forever has no Warband Bank, so only the character bank is swept (#47).
